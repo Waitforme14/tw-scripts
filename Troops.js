@@ -10,7 +10,7 @@ Como já tem tudo configurado no GitHub, **não precisa de alterar nada na sua b
 
 Aqui tem o código completo atualizado:
 
-```javascript
+javascript
 var strVersion = 'v8.6 (Discord Mod)';
 var latestUpdated = '2023-12-25';
 
