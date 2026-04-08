@@ -1,4 +1,4 @@
-var strVersion = 'v8.6 (Discord Mod + BugFix)';
+var strVersion = 'v8.6 (Discord Mod + Buscas)';
 var latestUpdated = '2023-12-25';
 
 // Traduzido para PT para o Discord e UI
@@ -46,13 +46,8 @@ function fnCreateUnitConfig() { return fnCreateConfig('get_unit_info'); }
 function fnHasArchers() { return game_data.units.includes('archer'); }
 function fnHasMilitia() { return game_data.units.includes('militia'); }
 
-// -------------------------------------------------------------------------
-// FUNÇÃO REESCRITA: AGORA LÊ CORRETAMENTE SEM APAGAR LINHAS
-// -------------------------------------------------------------------------
 function fnGetTroopCount() {
     var villageTroopInfo = [];
-
-    // Descobre inteligentemente a ordem das colunas
     let unitColumns = [];
     jQuery('#units_table thead th').each(function(index) {
         let img = jQuery(this).find('img').attr('src');
@@ -72,7 +67,6 @@ function fnGetTroopCount() {
         let $row = jQuery(this);
         let text = $row.text().toLowerCase();
         
-        // Na vista detalhada, o RedAlert só usa a linha "Próprias" para calcular Nukes
         if (isDetailedView && !text.includes('próprias')) return; 
         
         let coordsMatch = $row.text().match(/\d+\|\d+/g);
@@ -88,12 +82,7 @@ function fnGetTroopCount() {
 
         if (!coords) return;
 
-        var villageData = {
-            x: parseInt(coords[1], 10),
-            y: parseInt(coords[2], 10),
-            coords: coords[0],
-            troops: new Array(configUnits.length).fill(0)
-        };
+        var villageData = { x: parseInt(coords[1], 10), y: parseInt(coords[2], 10), coords: coords[0], troops: new Array(configUnits.length).fill(0) };
 
         $row.find('td').each(function(index) {
             if (unitColumns[index]) {
@@ -123,7 +112,7 @@ function fnCriteriaToStr(criteria) {
 }
 
 // -------------------------------------------------------------------------
-// EXTRAÇÃO E ENVIO PARA O DISCORD
+// EXTRAÇÃO E ENVIO PARA O DISCORD (ATUALIZADO COM BUSCAS E SOMAS)
 // -------------------------------------------------------------------------
 function fnSendToDiscord() {
     const webhookUrl = window.meuWebhookTW;
@@ -132,38 +121,56 @@ function fnSendToDiscord() {
         return;
     }
 
-    let discordData = { total: {}, inside: {}, outside: {} };
+    let discordData = { total: {}, idle: {}, scavenge: {}, homeTotal: {}, outside: {} };
     let unitColumns = [];
 
+    // Inicializa todos os contadores a zero para todas as unidades detetadas
     jQuery('#units_table thead th').each(function(index) {
         let img = jQuery(this).find('img').attr('src');
         if (img) {
             for (let i = 0; i < game_data.units.length; i++) {
-                if (img.includes('unit_' + game_data.units[i])) { unitColumns[index] = game_data.units[i]; discordData.total[game_data.units[i]] = 0; discordData.inside[game_data.units[i]] = 0; discordData.outside[game_data.units[i]] = 0; break; }
+                let u = game_data.units[i];
+                if (img.includes('unit_' + u)) { 
+                    unitColumns[index] = u; 
+                    discordData.total[u] = 0; 
+                    discordData.idle[u] = 0; 
+                    discordData.scavenge[u] = 0; 
+                    discordData.homeTotal[u] = 0; 
+                    discordData.outside[u] = 0; 
+                    break; 
+                }
             }
         }
     });
 
+    // Percorre a tabela
     jQuery('#units_table tbody tr').each(function() {
         let text = jQuery(this).text().toLowerCase();
         let isTotal = text.includes('próprias');
-        let isInside = text.includes('na aldeia');
+        let isIdle = text.includes('na aldeia');
+        let isScavenge = text.includes('buscas'); // Apanha "nas buscas" ou "buscas"
         let isOutside = text.includes('fora');
 
-        if (isTotal || isInside || isOutside) {
+        if (isTotal || isIdle || isScavenge || isOutside) {
             jQuery(this).find('td').each(function(index) {
                 if (unitColumns[index]) {
                     let val = parseInt(jQuery(this).text().trim().replace(/\./g, ''), 10);
                     if (!isNaN(val)) {
                         let unit = unitColumns[index];
                         if (isTotal) discordData.total[unit] += val;
-                        if (isInside) discordData.inside[unit] += val;
+                        if (isIdle) discordData.idle[unit] += val;
+                        if (isScavenge) discordData.scavenge[unit] += val;
                         if (isOutside) discordData.outside[unit] += val;
                     }
                 }
             });
         }
     });
+
+    // Calcula o "Total em Casa" (Paradas + Buscas)
+    for (let u in discordData.idle) {
+        discordData.homeTotal[u] = discordData.idle[u] + discordData.scavenge[u];
+    }
 
     const playerName = game_data.player.name;
     const formatRow = (dataObj) => {
@@ -177,7 +184,14 @@ function fnSendToDiscord() {
         return str.replace(/ \| $/, '') || 'Nenhuma tropa';
     };
 
-    let msg = `📊 **Relatório Detalhado de Tropas - ${playerName}**\n\n🛡️ **TOTAIS (Próprias):**\n${formatRow(discordData.total)}\n\n🏠 **DENTRO DE CASA (Na aldeia):**\n${formatRow(discordData.inside)}\n\n⛺ **FORA DE CASA (Apoios/Fora):**\n${formatRow(discordData.outside)}`;
+    // Constrói a mensagem final do Discord com a nova estrutura
+    let msg = `📊 **Relatório Detalhado de Tropas - ${playerName}**\n\n`;
+    msg += `🛡️ **TOTAIS (Soma total de todas as aldeias):**\n${formatRow(discordData.total)}\n\n`;
+    msg += `🏠 **EM CASA:**\n`;
+    msg += `🔸 **Paradas:** ${formatRow(discordData.idle)}\n`;
+    msg += `🔸 **Nas Buscas:** ${formatRow(discordData.scavenge)}\n`;
+    msg += `🔹 **TOTAL (Paradas + Buscas):** ${formatRow(discordData.homeTotal)}\n\n`;
+    msg += `⛺ **FORA DE CASA (Apoios):**\n${formatRow(discordData.outside)}`;
 
     jQuery('#btnSendDiscord').text('A enviar...').prop('disabled', true);
     
@@ -189,6 +203,7 @@ function fnSendToDiscord() {
     .catch(err => UI.ErrorMessage('Erro de ligação: ' + err))
     .finally(() => { jQuery('#btnSendDiscord').text('📤 Enviar para o Discord').prop('disabled', false); });
 }
+// -------------------------------------------------------------------------
 
 function fnCalculateTroopCount() {
     const playerName = game_data.player.name; const playerId = game_data.player.id; const playerPoints = game_data.player.points;
@@ -211,105 +226,4 @@ function fnCalculateTroopCount() {
     if (fnHasArchers()) { defense.push('archer'); offense.push('marcher'); }
     if (fnHasMilitia()) { defense.push('militia'); }
 
-    var summary = { unitTotal: { tally: 0, population: 0 }, defense: { tally: 0, count: 0, population: 0, coords: [] }, offense: { tally: 0, count: 0, population: 0, coords: [] }, };
-    $(unitConfig).children().each(function (i, e) { summary[e.nodeName] = { tally: 0, count: 0, population: 0, coords: [] }; });
-    for (item in outputSummary) { if (outputSummary.hasOwnProperty(item)) summary[item] = { tally: 0, count: 0, population: 0, coords: [] }; }
-
-    var villageTroops = fnGetTroopCount();
-    for (ii = 0; ii < villageTroops.length; ii++) {
-        village = villageTroops[ii];
-        total = { defense: { tally: 0, count: 0, population: 0, coords: [] }, offense: { tally: 0, count: 0, population: 0, coords: [] } };
-        $(unitConfig).children().each(function (i, e) { total[e.nodeName] = { tally: 0, count: 0, population: 0, coords: [] }; });
-
-        index = 0;
-        $(unitConfig).children().each(function (i, e) {
-            var unit = e.nodeName;
-            total[unit].count += village.troops[index];
-            total[unit].population += village.troops[index] * parseInt($(e).find('pop').text(), 10);
-            if (new RegExp('^(' + defense.join('|') + ')$').test(unit)) { total.defense.count += total[unit].count; total.defense.population += total[unit].population; }
-            if (new RegExp('^(' + offense.join('|') + ')$').test(unit)) { total.offense.count += total[unit].count; total.offense.population += total[unit].population; }
-            summary[unit].count += total[unit].count; summary[unit].population += total[unit].population;
-            summary.unitTotal.tally += total[unit].count; summary.unitTotal.population += total[unit].population;
-            index++;
-        });
-
-        summary.defense.count += total.defense.count; summary.defense.population += total.defense.population;
-        summary.offense.count += total.offense.count; summary.offense.population += total.offense.population;
-
-        for (item in outputSummary) {
-            if (outputSummary.hasOwnProperty(item)) {
-                isValid = true;
-                for (jj = 0; jj < outputSummary[item].criteria.length; jj++) {
-                    criteria = outputSummary[item].criteria[jj];
-                    if (!(typeof criteria.minpop == 'undefined' || !criteria.minpop || total[criteria.unit].population >= criteria.minpop)) isValid = false;
-                    if (!(typeof criteria.maxpop == 'undefined' || !criteria.maxpop || total[criteria.unit].population < criteria.maxpop)) isValid = false;
-                }
-                if (isValid) { summary[item].coords.push(village.coords); summary[item].tally++; }
-            }
-        }
-    }
-
-    var groupSummary = {};
-    for (item in outputSummary) {
-        if (outputSummary.hasOwnProperty(item)) {
-            if (typeof groupSummary[outputSummary[item].group] == 'undefined') groupSummary[outputSummary[item].group] = [];
-            groupSummary[outputSummary[item].group].push(item);
-        }
-    }
-
-    var curGroup = maxGroups; totalTroops = summary.unitTotal.population;
-    const intPlayerPoints = parseInt(playerPoints); let troopsToPointsRatio = 0.0;
-    if (intPlayerPoints !== 0) troopsToPointsRatio = (totalTroops / intPlayerPoints).toFixed(2);
-    setTimeout(function () { jQuery('#troopsPointsRatio').text(troopsToPointsRatio); }, 100);
-
-    var docSource = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">\n<html><head><script type="text/javascript">function fnShowCoords(id,description){ var coords={};';
-    for (item in outputSummary) { if (outputSummary.hasOwnProperty(item)) { if (summary[item].coords.length) docSource += 'coords["' + item + '"] = "' + summary[item].coords.join(' ') + '";\n'; } }
-    docSource += 'document.getElementById("coords_group").innerHTML = description; var eleCoords = document.getElementById("coords_container"); eleCoords.value = coords[id]?coords[id]:""; eleCoords.focus(); eleCoords.select();}</script></head><body><table class="main" width="100%" align="center"><tr><td><h2>' + fnTranslate(curGroup++) + '<sup><span style="font-size:small;"></span></sup></h2>' + `${showPlayer}${showTroopsPointRatio}${currentGroup}${serverDateTime}` + '<table class="not-draggable"><tr><td width="450" valign="top"><table class="vis" width="100%">';
-    
-    for (item in groupSummary) {
-        if (groupSummary.hasOwnProperty(item)) {
-            count = 0; docSource += '<tr><th colspan="2">' + fnTranslate(curGroup++) + '</th></tr>';
-            for (jj = 0; jj < groupSummary[item].length; jj++) {
-                docSource += '<tr class="' + (count++ % 2 ? 'row_b' : 'row_a') + '"><td width="240" style="white-space:nowrap;"><a href="#" onclick="fnShowCoords(\'' + groupSummary[item][jj] + "','" + fnTranslate(outputSummary[groupSummary[item][jj]].descID) + '\');">&raquo;&nbsp; ' + fnTranslate(outputSummary[groupSummary[item][jj]].descID) + '</a></td>\n<td width="240"' + (summary[groupSummary[item][jj]].tally > 0 ? '' : ' class="hidden"') + ' style="text-align:right;"><span>' + summary[groupSummary[item][jj]].tally + '</span></td></tr>';
-            }
-        }
-    }
-    docSource += '</table><td valign="top"><table class="vis" width="100%"><tr><th colspan="2" style="white-space:nowrap;">' + fnTranslate(curGroup++) + '</th></tr>';
-    count = 0;
-    for (key in offense) { if (offense.hasOwnProperty(key)) { docSource += '<tr class="' + (count++ % 2 ? 'row_b' : 'row_a') + '"><td><img src="https://' + location.hostname + '/graphic/unit/unit_' + offense[key] + '.png?1" alt=""/></td><td style="white-space:nowrap;"><span> ' + formatAsNumber(summary[offense[key]].count) + ' ' + unitDesc[offense[key]] + '</span></td></tr>'; } }
-    docSource += '</table><table class="vis" width="100%"><tr><th colspan="2" style="white-space:nowrap;">' + fnTranslate(curGroup++) + '</th></tr>';
-    count = 0;
-    for (key in defense) { if (defense.hasOwnProperty(key)) { docSource += '<tr class="' + (count++ % 2 ? 'row_b' : 'row_a') + '"><td><img src="https://' + location.hostname + '/graphic/unit/unit_' + defense[key] + '.png?1" alt=""/></td><td style="white-space:nowrap;"><span> ' + formatAsNumber(summary[defense[key]].count) + ' ' + unitDesc[defense[key]] + '</span></td></tr>'; } }
-    docSource += '</table><table class="vis" width="100%"><tr><th colspan="2" style="white-space:nowrap;">' + fnTranslate(curGroup++) + '</th></tr>';
-    count = 0;
-    $(unitConfig).children().each(function (i, e) {
-        var unit = e.nodeName;
-        if (!new RegExp('^(' + defense.join('|') + '|' + offense.join('|') + ')$').test(unit)) { docSource += '<tr class="' + (count++ % 2 ? 'row_b' : 'row_a') + '"><td><img src="https://' + location.hostname + '/graphic/unit/unit_' + unit + '.png?1" alt=""/></td><td style="white-space:nowrap;"><span> ' + formatAsNumber(summary[unit].count) + ' ' + unitDesc[unit] + '</span></td></tr>'; }
-    });
-    docSource += '</table><table class="vis" width="100%"><tr><th colspan="2" style="white-space:nowrap;">' + fnTranslate(curGroup++) + '</th></tr><tr class="row_a"><td><span>Count:</span></td><td style="white-space:nowrap;"><span> ' + formatAsNumber(summary.unitTotal.tally) + '</span></td></tr><tr class="row_b"><td><span>Pop:</span></td><td style="white-space:nowrap;"><span> ' + formatAsNumber(summary.unitTotal.population) + '</span></td></tr></table></td></td></tr></table><br>';
-    docSource += '<table id="coordinate_table" class="vis" style="width:100%;"><tr><th>' + fnTranslate(curGroup++) + ': <span id="coords_group" style="font-weight:100;"></span><tr><td style="box-sizing:border-box;width:100%;"><textarea id="coords_container" style="resize:none;width:100%;box-sizing:border-box;height:60px;"></textarea></td></tr></table>';
-    docSource += '<div style="padding: 10px 0;"><button id="btnSendDiscord" class="btn btn-default" style="width: 100%; background-color: #5865F2; color: white; padding: 10px; border-radius: 4px; font-weight: bold; border: none; cursor: pointer; transition: 0.2s;">📤 Enviar para o Discord</button></div>';
-    docSource += `<small><strong>Troops Counter ${strVersion}</strong> - Modified for Discord</small></body></html>`;
-
-    if (DRAGGABLE) {
-        docSource += `<a class="popup_box_close custom-close-button" onClick="clickDraggableEl();" href="#">&nbsp;</a><style>.troops-counter-content { position: fixed; background-color: #f4e4bc !important; border: 1px solid #603000; padding: 10px; top: 10vh; right: 15vw; z-index: 1000; width: 440px; height: auto; } .custom-close-button { right: 0; top: 0; } #btnSendDiscord:hover { background-color: #4752C4 !important; }</style>`;
-        if (jQuery('.troops-counter-content').length > 0) {
-            UI.ErrorMessage('Troops Counter is already loaded!');
-        } else {
-            var troopsCounterContent = document.createElement('div'); troopsCounterContent.classList.add('troops-counter-content'); troopsCounterContent.innerHTML = docSource; jQuery('body').append(troopsCounterContent); jQuery('.troops-counter-content').draggable({ cancel: '.not-draggable' }); jQuery('#btnSendDiscord').on('click', fnSendToDiscord);
-        }
-    } else {
-        const popupContent = preparePopupContent(docSource, '440px'); Dialog.show('content', popupContent); jQuery('#btnSendDiscord').on('click', fnSendToDiscord); jQuery('head').append('<style>#btnSendDiscord:hover { background-color: #4752C4 !important; }</style>');
-    }
-}
-
-function clickDraggableEl() { jQuery('.troops-counter-content').remove(); }
-function initDebug() { console.debug(`[Troops Counter] Script Loaded`); }
-function formatAsNumber(number) { return parseInt(number).toLocaleString('pt-PT'); }
-function checkScreen(userScreen, userMode) { return (game_data.screen === userScreen || window.location.href.includes('screen=' + userScreen)) && (game_data.mode === userMode || window.location.href.includes('mode=' + userMode)); }
-function preparePopupContent(popupBody, maxWidth) { return `<div class="ra-body" style="max-width: ${maxWidth}">${popupBody}</div>`; }
-
-(async function () {
-    if (!game_data.features.Premium.active) { UI.ErrorMessage('A Conta Premium precisa de estar ativa para este script funcionar!', 6000); } 
-    else { fnExecuteScript(); }
-})();
+    var summary = { unitTotal: { tally: 0, population: 0 }, defense: { tally: 0, count: 0, population: 0, coords: [] }, offense: { tally: 0, count: 0, population:
