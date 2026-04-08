@@ -40,7 +40,7 @@
                     successMessage: 'Loaded successfully!',
                     loadingMessage: 'Loading...',
                     loadingWorldConfigMessage: 'Loading world config...',
-                    credits: 'Script Engine: JDi4s | Classic UI Mod'
+                    credits: 'Waitforme'
                 },
                 pt_PT: {
                     title: 'Contador de tropas em casa e em buscas',
