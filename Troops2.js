@@ -50,10 +50,10 @@
             const allTranslations = VillagesTroopsCounter.translations();
             this.UserTranslation = allTranslations[game_data.locale] || allTranslations.pt_PT;
             
-            // Filtro para não processar arqueiros nem milícia
+            // FILTRO: Remove Arqueiros e Milícia da contagem
             const forbidden = ['militia', 'archer', 'marcher'];
-            this.availableUnits = Array.isArray(game_data.units) ? [...game_data.units] : [];
-            this.availableUnits = this.availableUnits.filter(u => !forbidden.includes(u));
+            this.availableUnits = (Array.isArray(game_data.units) ? [...game_data.units] : [])
+                                  .filter(u => !forbidden.includes(u));
 
             this.worldConfig = null;
             this.isScavengingWorld = false;
@@ -143,11 +143,10 @@
                 $.each(troopsTable, (_, tbodyObj) => {
                     const villageTroopsLine = $(tbodyObj).find('tr').eq(0).find('td:gt(1)');
                     let c = 0;
-                    // Mapeamento correto ignorando colunas arqueiros se existirem no servidor
                     $(overviewTroopsPage).find('#units_table thead th img').each((idx, img) => {
                         const unitName = $(img).attr('src').match(/unit_(\w+)/)[1];
                         if (this.availableUnits.includes(unitName)) {
-                            const val = parseInt($(tbodyObj).find('tr').eq(0).find('td').eq(idx + 2).text().trim(), 10) || 0;
+                            const val = parseInt($(tbodyObj).find('tr').eq(0).find('td').eq(idx+2).text().trim(), 10) || 0;
                             troopsObj.villagesTroops[unitName] += val;
                         }
                     });
@@ -165,9 +164,11 @@
 
         #getGroupsObj() {
             const html = $.parseHTML(this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'groups', { type: 'static' })));
-            let groups = $(html).find('.vis_item').find('a,strong');
-            const groupsArr = {};
-            $.each(groups, (_, group) => { const val = $(group).text().trim(); groupsArr[group.getAttribute('data-group-id')] = val.substring(1, val.length - 1); });
+            let groupsArr = {};
+            $(html).find('.vis_item').find('a,strong').each((_, group) => {
+                const val = $(group).text().trim();
+                groupsArr[group.getAttribute('data-group-id')] = val.substring(1, val.length - 1);
+            });
             return groupsArr;
         }
 
@@ -188,7 +189,7 @@
         #getTroopsBBCode(totalTroops) {
             let bbCode = `[b]Contagem de Tropas (${this.#getServerTime()})[/b]\n[b]Grupo Atual:[/b] ${this.#getCurrentGroupName()}\n\n`;
             const labels = { spear: 'Lanceiros', sword: 'Espadachins', axe: 'Vikings', spy: 'Batedores', light: 'Cavalaria Leve', heavy: 'Cavalaria Pesada', ram: 'Aríetes', catapult: 'Catapultas', knight: 'Paladinos', snob: 'Nobres' };
-            for (let [key, value] of Object.entries(totalTroops)) { bbCode += `[unit]${key}[/unit] [b]${this.#formatNumber(value)}[/b] ${labels[key] || key}\n`; }
+            for (let [key, value] of Object.entries(totalTroops)) { if(this.availableUnits.includes(key)) bbCode += `[unit]${key}[/unit] [b]${this.#formatNumber(value)}[/b] ${labels[key] || key}\n`; }
             return bbCode;
         }
 
@@ -201,21 +202,27 @@
                 content: `📊 **Relatório de Poder Militar - ${playerName}**`,
                 embeds: [
                     {
-                        title: `Mundo: ${game_data.world} | Grupo: ${currentGroup}`,
-                        color: 15844367,
+                        title: "🛡️ TROPAS DEFENSIVAS",
+                        color: 3447003,
                         fields: [
                             { 
-                                name: "🛡️ PODER DEFENSIVO", 
+                                name: "Unidades", 
                                 value: `<:lanceiro:1368839513891409972> **Lanças:** ${this.#formatNumber(total.spear)}\n<:espadachim:1368839514746785844> **Espadas:** ${this.#formatNumber(total.sword)}\n<:pesada:1368839517997498398> **Pesada:** ${this.#formatNumber(total.heavy)}\n<:catapulta:1368839516441280573> **Catas:** ${this.#formatNumber(total.catapult)}\n<:paladino:1368332901728391319> **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
-                            },
+                            }
+                        ]
+                    },
+                    {
+                        title: "⚔️ TROPAS OFENSIVAS",
+                        color: 15158332,
+                        fields: [
                             { 
-                                name: "⚔️ PODER OFENSIVO", 
+                                name: "Unidades", 
                                 value: `<:viking:1368839515661139968> **Vikings:** ${this.#formatNumber(total.axe)}\n<:batedor:1368839512423137404> **Batedores:** ${this.#formatNumber(total.spy)}\n<:leve:1368839513077715016> **Leve:** ${this.#formatNumber(total.light)}\n<:ariete:1368839512033038387> **Aríetes:** ${this.#formatNumber(total.ram)}\n<:catapulta:1368839516441280573> **Catas:** ${this.#formatNumber(total.catapult)}\n<:paladino:1368332901728391319> **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             }
                         ],
-                        footer: { text: `Tribal Wars | Atualizado em: ${this.#getServerTime()}` }
+                        footer: { text: `Mundo: ${game_data.world} | Grupo: ${currentGroup} | ${this.#getServerTime()}` }
                     }
                 ]
             };
@@ -226,7 +233,7 @@
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify(embedData),
-                success: () => { alert("Poder Militar enviado!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
+                success: () => { alert("Enviado para o Discord com sucesso!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
                 error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }
             });
         }
@@ -310,9 +317,7 @@
 #dd-root .dd-sub { margin-top: 4px; color: #503010; font-size: 12px; font-style: italic; }
 #dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; color: #302010; padding: 6px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
 #dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
-#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; color: #302010; display: inline-flex; gap: 6px; margin-right: 5px; }
-#dd-root .dd-pill-label { color: #805020; font-weight: bold; font-size: 10px; text-transform: uppercase; }
-#dd-root .dd-actions select { height: 32px; border-radius: 3px; border: 1px solid #805020; background: #fff; padding: 0 8px; min-width: 180px; }
+#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; color: #302010; display: inline-flex; gap: 6px; align-items: center; margin-right: 5px; }
 #dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: 700; font-size: 12px; }
 #dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
 #dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
