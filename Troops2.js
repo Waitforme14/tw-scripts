@@ -31,8 +31,8 @@
                     atHomeOnly: 'Em casa',
                     exportTroops: 'Exportar Contagem de Tropas',
                     errorMessages: {
-                        premiumRequired: 'Erro. É necessário possuir conta premium!',
-                        errorFetching: 'Ocorreu um erro ao carregar URL:',
+                        premiumRequired: 'Erro. Conta premium necessária!',
+                        errorFetching: 'Erro ao carregar URL:',
                         missingSavengeMassScreenElement: 'Erro ao localizar ScavengeMassScreen.',
                         invalidWebhook: 'Webhook do Discord inválido ou não definido.',
                         troopsReadError: 'Não foi possível ler os dados das tropas.',
@@ -40,7 +40,7 @@
                     },
                     successMessage: 'Carregado com sucesso!',
                     loadingMessage: 'A carregar...',
-                    loadingWorldConfigMessage: 'A carregar configurações do mundo...',
+                    loadingWorldConfigMessage: 'A carregar configurações...',
                     credits: 'Script Engine: JDi4s | Classic UI Mod'
                 }
             };
@@ -66,7 +66,7 @@
             let worldConfig = localStorage.getItem(this.worldConfigFileName);
             if (worldConfig === null) worldConfig = await this.#getWorldConfig();
             this.worldConfig = typeof worldConfig === 'string' ? $.parseXML(worldConfig) : worldConfig;
-            try { this.isScavengingWorld = this.worldConfig.getElementsByTagName('config')[0].getElementsByTagName('game')[0].getElementsByTagName('scavenging')[0].textContent.trim() === '1'; } catch (e) { UI.ErrorMessage(this.UserTranslation.errorMessages.invalidWorldConfig); throw e; }
+            try { this.isScavengingWorld = this.worldConfig.getElementsByTagName('config')[0].getElementsByTagName('game')[0].getElementsByTagName('scavenging')[0].textContent.trim() === '1'; } catch (e) { throw e; }
         }
 
         async #getWorldConfig() {
@@ -91,7 +91,7 @@
 
         #fetchHtmlPage(url) {
             let tempData = null;
-            $.ajax({ async: false, url: url, type: 'GET', success: data => { tempData = data; }, error: () => { UI.ErrorMessage(`${this.UserTranslation.errorMessages.errorFetching} ${url}`); } });
+            $.ajax({ async: false, url: url, type: 'GET', success: data => { tempData = data; }, error: () => { console.error("Erro ao carregar URL"); } });
             return tempData;
         }
 
@@ -184,27 +184,27 @@
         #sendToDiscordEnhanced(total) {
             const playerName = game_data.player.name;
             const currentGroup = this.#getCurrentGroupName();
-            if (typeof webhookURL !== 'string' || !webhookURL.startsWith('https://discord.com/api/webhooks/')) { alert("❌ Webhook inválido ou não definido."); return; }
+            if (typeof webhookURL !== 'string' || !webhookURL.startsWith('https://discord.com/api/webhooks/')) { alert("❌ Webhook inválido!"); return; }
 
             const embedData = {
-                content: `📊 **Relatório de Poder Militar - ${playerName}**\n🌍 Mundo: ${game_data.world} | 🗂️ Grupo: ${currentGroup}`,
+                content: `📊 **Poder Militar - ${playerName}** (Mundo: ${game_data.world})`,
                 embeds: [
                     {
-                        title: "🛡️ PODER DEFENSIVO",
+                        title: "🛡️ TROPAS DEFENSIVAS",
                         color: 3447003,
                         fields: [
+                            { name: "🗂️ Grupo", value: currentGroup, inline: false },
                             { name: "<:lanceiro:1368839513891409972> Lanceiros", value: this.#formatNumber(total.spear), inline: true },
                             { name: "<:espadachim:1368839514746785844> Espadachins", value: this.#formatNumber(total.sword), inline: true },
                             { name: "<:arqueiro:1368839511395516416> Arqueiros", value: this.#formatNumber(total.archer), inline: true },
-                            { name: "<:batedor:1368839512423137404> Batedores", value: this.#formatNumber(total.spy), inline: true },
                             { name: "<:pesada:1368839517997498398> Cav. Pesada", value: this.#formatNumber(total.heavy), inline: true },
                             { name: "<:catapulta:1368839516441280573> Catapultas", value: this.#formatNumber(total.catapult), inline: true },
-                            { name: "<:paladino:1368332901728391319> Paladinos", value: this.#formatNumber(total.knight), inline: true }
+                            { name: "<:paladino:1368332901728391319> Paladino", value: this.#formatNumber(total.knight), inline: true }
                         ],
-                        footer: { text: `Atualizado em: ${this.#getServerTime()}` }
+                        footer: { text: `Gerado em: ${this.#getServerTime()}` }
                     },
                     {
-                        title: "⚔️ PODER OFENSIVO",
+                        title: "⚔️ TROPAS OFENSIVAS",
                         color: 15158332,
                         fields: [
                             { name: "<:viking:1368839515661139968> Vikings", value: this.#formatNumber(total.axe), inline: true },
@@ -213,14 +213,21 @@
                             { name: "<:montado:1368839511395516416> Arq. Montados", value: this.#formatNumber(total.marcher), inline: true },
                             { name: "<:ariete:1368839513891409972> Aríetes", value: this.#formatNumber(total.ram), inline: true },
                             { name: "<:catapulta:1368839516441280573> Catapultas", value: this.#formatNumber(total.catapult), inline: true },
-                            { name: "<:paladino:1368332901728391319> Paladinos", value: this.#formatNumber(total.knight), inline: true }
+                            { name: "<:paladino:1368332901728391319> Paladino", value: this.#formatNumber(total.knight), inline: true }
                         ]
                     }
                 ]
             };
 
             $('#dd-send-discord').text('A enviar...').prop('disabled', true);
-            $.ajax({ url: webhookURL, method: 'POST', contentType: 'application/json', data: JSON.stringify(embedData), success: () => { alert("Poder Militar enviado para o Discord!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }, error: () => { alert("Erro ao enviar dados."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); } });
+            $.ajax({
+                url: webhookURL,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(embedData),
+                success: () => { alert("Poder Militar enviado para o Discord!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
+                error: () => { alert("Erro ao enviar dados."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }
+            });
         }
 
         async #createUI() {
@@ -246,10 +253,10 @@
                 return h + `</tr>`;
             };
 
-            const renderCard = (unit, value, label) => `
+            const renderCard = (unit, val, label) => `
                 <div class="dd-unit-card">
-                    <img src="https://dspt.innogamescdn.com/asset/2a2f957f/graphic/unit/unit_${unit}.png" alt="${unit}">
-                    <div class="dd-unit-value">${this.#formatNumber(value)}</div>
+                    <img src="https://dspt.innogamescdn.com/asset/2a2f957f/graphic/unit/unit_${unit}.png">
+                    <div class="dd-unit-value">${this.#formatNumber(val)}</div>
                     <div class="dd-unit-name">${label}</div>
                 </div>`;
 
@@ -259,8 +266,8 @@
         <div class="dd-header"><div><div class="dd-kicker">Tribal Wars</div><h3>${t.title}</h3><div class="dd-sub">${t.subtitle}</div></div><div class="dd-stamp">${this.#getServerTime()}</div></div>
         <div class="dd-topbar">
             <div class="dd-meta">
-                <div class="dd-pill"><span class="dd-pill-label">${t.group}:</span> <strong>${this.#getCurrentGroupName()}</strong></div>
-                <div class="dd-pill"><span class="dd-pill-label">${t.player}:</span> <strong>${game_data.player.name}</strong></div>
+                <div class="dd-pill"><span>${t.group}:</span> <strong>${this.#getCurrentGroupName()}</strong></div>
+                <div class="dd-pill"><span>${t.player}:</span> <strong>${game_data.player.name}</strong></div>
             </div>
             <div class="dd-actions">${groupsHtml}<button id="dd-refresh" class="dd-btn dd-btn-secondary">${t.refresh}</button><button id="dd-send-discord" class="dd-btn dd-btn-primary">${t.sendDiscord}</button></div>
         </div>
@@ -299,12 +306,11 @@
 #dd-root { color: #302010; font-family: Verdana, sans-serif; font-size: 12px; }
 #dd-root .dd-shell { background: #f4e4bc url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/background/content.jpg'); border: 2px solid #805020; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); overflow: hidden; }
 #dd-root .dd-header { display: flex; justify-content: space-between; padding: 15px 20px; background: #c1a264 url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/screen/tableheader_bg3.png') repeat-x; border-bottom: 2px solid #805020; }
-#dd-root h3 { margin: 0; font-size: 22px; color: #302010; font-weight: bold; }
-#dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; color: #302010; padding: 6px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
+#dd-root h3 { margin: 0; font-size: 22px; font-weight: bold; }
+#dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; padding: 6px 10px; font-weight: bold; }
 #dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
-#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; color: #302010; display: inline-flex; gap: 6px; margin-right: 5px; }
-#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: 700; font-size: 12px; }
-#dd-root .dd-btn-secondary { background: #e3d5b3; color: #302010; }
+#dd-root .dd-pill { background: #fff; border: 1px solid #805020; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
+#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: bold; }
 #dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
 #dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
 #dd-root .dd-panel { background: #fff5da; border: 1px solid #805020; padding: 14px; border-radius: 4px; }
