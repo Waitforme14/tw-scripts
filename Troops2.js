@@ -12,7 +12,7 @@
             return {
                 pt_PT: {
                     title: 'Contador de tropas em casa e em buscas',
-                    subtitle: 'Resumo de Poder Militar',
+                    subtitle: 'Resumo de Poder Militar (Sem Arqueiros)',
                     home: 'Em casa',
                     scavenging: 'Em busca',
                     total: 'Total',
@@ -49,8 +49,14 @@
         constructor() {
             const allTranslations = VillagesTroopsCounter.translations();
             this.UserTranslation = allTranslations[game_data.locale] || allTranslations.pt_PT;
+            
+            // FILTRO: Removemos arqueiros da lista global de unidades disponíveis
             this.availableUnits = Array.isArray(game_data.units) ? [...game_data.units] : [];
-            if (this.availableUnits.indexOf('militia') !== -1) this.availableUnits.splice(this.availableUnits.indexOf('militia'), 1);
+            ['militia', 'archer', 'marcher'].forEach(u => {
+                const idx = this.availableUnits.indexOf(u);
+                if (idx !== -1) this.availableUnits.splice(idx, 1);
+            });
+
             this.worldConfig = null;
             this.isScavengingWorld = false;
             this.worldConfigFileName = `worldConfigFile_${game_data.world}`;
@@ -103,8 +109,8 @@
                 if (!scavengingObject) return troopsObj; if (scavengingObject.length === 0) break;
                 lastRunTime = Date.now();
                 $.each(scavengingObject, (_, villageData) => {
-                    $.each(villageData.unit_counts_home || {}, (key, value) => { if (key !== 'militia' && typeof troopsObj.villagesTroops[key] !== 'undefined') troopsObj.villagesTroops[key] += value; });
-                    $.each(villageData.options || [], (_, option) => { if (option.scavenging_squad !== null) { $.each(option.scavenging_squad.unit_counts || {}, (key, value) => { if (key !== 'militia' && typeof troopsObj.scavengingTroops[key] !== 'undefined') troopsObj.scavengingTroops[key] += value; }); } });
+                    $.each(villageData.unit_counts_home || {}, (key, value) => { if (this.availableUnits.includes(key)) troopsObj.villagesTroops[key] += value; });
+                    $.each(villageData.options || [], (_, option) => { if (option.scavenging_squad !== null) { $.each(option.scavenging_squad.unit_counts || {}, (key, value) => { if (this.availableUnits.includes(key)) troopsObj.scavengingTroops[key] += value; }); } });
                 });
                 currentPage++;
             } while (true);
@@ -139,7 +145,16 @@
                 $.each(troopsTable, (_, tbodyObj) => {
                     const villageTroopsLine = $(tbodyObj).find('tr').eq(0).find('td:gt(1)');
                     let c = 0;
-                    $.each(this.availableUnits, (_, value) => { troopsObj.villagesTroops[value] += parseInt(villageTroopsLine.eq(c).text().trim(), 10) || 0; c++; });
+                    // Mapeamento correto ignorando colunas de arqueiros se existirem no HTML
+                    const headers = $(overviewTroopsPage).find('#units_table thead th img');
+                    headers.each((idx, img) => {
+                        const src = $(img).attr('src');
+                        const unitName = src.match(/unit_(\w+)/)[1];
+                        if (this.availableUnits.includes(unitName)) {
+                            const val = parseInt($(tbodyObj).find('tr').eq(0).find('td').eq(idx+2).text().trim(), 10) || 0;
+                            troopsObj.villagesTroops[unitName] += val;
+                        }
+                    });
                 });
                 currentPage++; await this.#waitMilliseconds(lastRunTime, 200);
             } while (true);
@@ -176,12 +191,11 @@
 
         #getTroopsBBCode(totalTroops) {
             let bbCode = `[b]Contagem de Tropas (${this.#getServerTime()})[/b]\n[b]Grupo Atual:[/b] ${this.#getCurrentGroupName()}\n\n`;
-            const labels = { spear: 'Lanceiros', sword: 'Espadachins', axe: 'Vikings', archer: 'Arqueiros', spy: 'Batedores', light: 'Cavalaria Leve', marcher: 'Arqueiros Montados', heavy: 'Cavalaria Pesada', ram: 'Aríetes', catapult: 'Catapultas', knight: 'Paladinos', snob: 'Nobres' };
-            for (let [key, value] of Object.entries(totalTroops)) { bbCode += `[unit]${key}[/unit] [b]${this.#formatNumber(value)}[/b] ${labels[key] || key}\n`; }
+            const labels = { spear: 'Lanceiros', sword: 'Espadachins', axe: 'Vikings', spy: 'Batedores', light: 'Cavalaria Leve', heavy: 'Cavalaria Pesada', ram: 'Aríetes', catapult: 'Catapultas', knight: 'Paladinos', snob: 'Nobres' };
+            for (let [key, value] of Object.entries(totalTroops)) { if(this.availableUnits.includes(key)) bbCode += `[unit]${key}[/unit] [b]${this.#formatNumber(value)}[/b] ${labels[key] || key}\n`; }
             return bbCode;
         }
 
-        // --- FUNÇÃO DE ENVIO REESCRITA PARA UM ÚNICO EMBED (INFALÍVEL) ---
         #sendToDiscordEnhanced(total) {
             const playerName = game_data.player.name;
             const currentGroup = this.#getCurrentGroupName();
@@ -192,20 +206,20 @@
                 embeds: [
                     {
                         title: `Mundo: ${game_data.world} | Grupo: ${currentGroup}`,
-                        color: 15844367, // Dourado
+                        color: 15844367,
                         fields: [
                             { 
                                 name: "🛡️ PODER DEFENSIVO", 
-                                value: `**Lanceiros:** ${this.#formatNumber(total.spear)}\n**Espadachins:** ${this.#formatNumber(total.sword)}\n**Arqueiros:** ${this.#formatNumber(total.archer || 0)}\n**Cav. Pesada:** ${this.#formatNumber(total.heavy)}\n**Catapultas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                value: `• **Lanceiros:** ${this.#formatNumber(total.spear)}\n• **Espadachins:** ${this.#formatNumber(total.sword)}\n• **Cav. Pesada:** ${this.#formatNumber(total.heavy)}\n• **Catapultas:** ${this.#formatNumber(total.catapult)}\n• **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             },
                             { 
                                 name: "⚔️ PODER OFENSIVO", 
-                                value: `**Vikings:** ${this.#formatNumber(total.axe)}\n**Batedores:** ${this.#formatNumber(total.spy)}\n**Cav. Leve:** ${this.#formatNumber(total.light)}\n**Arq. Montados:** ${this.#formatNumber(total.marcher || 0)}\n**Aríetes:** ${this.#formatNumber(total.ram)}\n**Catapultas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                value: `• **Vikings:** ${this.#formatNumber(total.axe)}\n• **Batedores:** ${this.#formatNumber(total.spy)}\n• **Cav. Leve:** ${this.#formatNumber(total.light)}\n• **Aríetes:** ${this.#formatNumber(total.ram)}\n• **Catapultas:** ${this.#formatNumber(total.catapult)}\n• **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             }
                         ],
-                        footer: { text: `Tribal Wars | Atualizado em: ${this.#getServerTime()}` }
+                        footer: { text: `Gerado em: ${this.#getServerTime()}` }
                     }
                 ]
             };
@@ -274,16 +288,19 @@
             <div class="dd-panel">
                 <div class="dd-panel-head"><h4>${t.defensiveTotal}</h4></div>
                 <div class="dd-def-grid">
-                    ${renderCard('spear', total.spear, 'Lanceiros')} ${renderCard('sword', total.sword, 'Espadas')}
-                    ${this.availableUnits.includes('archer') ? renderCard('archer', total.archer, 'Arqueiros') : ''}
-                    ${renderCard('spy', total.spy, 'Batedores')} ${renderCard('heavy', total.heavy, 'Pesadas')}
-                    ${renderCard('catapult', total.catapult, 'Catas')} ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
+                    ${renderCard('spear', total.spear, 'Lanceiros')} 
+                    ${renderCard('sword', total.sword, 'Espadas')}
+                    ${renderCard('heavy', total.heavy, 'Pesadas')}
+                    ${renderCard('catapult', total.catapult, 'Catas')} 
+                    ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
                 </div>
                 <div class="dd-panel-head" style="margin-top:15px;"><h4>${t.offensiveTotal}</h4></div>
                 <div class="dd-def-grid">
-                    ${renderCard('axe', total.axe, 'Vikings')} ${renderCard('spy', total.spy, 'Batedores')}
-                    ${renderCard('light', total.light, 'Leves')} ${this.availableUnits.includes('marcher') ? renderCard('marcher', total.marcher, 'Montados') : ''}
-                    ${renderCard('ram', total.ram, 'Aríetes')} ${renderCard('catapult', total.catapult, 'Catas')}
+                    ${renderCard('axe', total.axe, 'Vikings')} 
+                    ${renderCard('spy', total.spy, 'Batedores')}
+                    ${renderCard('light', total.light, 'Leves')} 
+                    ${renderCard('ram', total.ram, 'Aríetes')} 
+                    ${renderCard('catapult', total.catapult, 'Catas')}
                     ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
                 </div>
             </div>
@@ -301,9 +318,8 @@
 #dd-root .dd-sub { margin-top: 4px; color: #503010; font-size: 12px; font-style: italic; }
 #dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; color: #302010; padding: 6px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
 #dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
-#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; color: #302010; display: inline-flex; gap: 6px; margin-right: 5px; }
+#dd-root .dd-pill { background: #fff; border: 1px solid #805020; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
 #dd-root .dd-pill-label { color: #805020; font-weight: bold; font-size: 10px; text-transform: uppercase; }
-#dd-root .dd-actions select { height: 32px; border-radius: 3px; border: 1px solid #805020; background: #fff; padding: 0 8px; min-width: 180px; }
 #dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: 700; font-size: 12px; }
 #dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
 #dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
