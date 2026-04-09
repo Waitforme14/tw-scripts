@@ -12,7 +12,7 @@
             return {
                 pt_PT: {
                     title: 'Contador de tropas em casa e em buscas',
-                    subtitle: 'Resumo de Poder Militar (Filtrado)',
+                    subtitle: 'Resumo de Poder Militar',
                     home: 'Em casa',
                     scavenging: 'Em busca',
                     total: 'Total',
@@ -49,12 +49,8 @@
         constructor() {
             const allTranslations = VillagesTroopsCounter.translations();
             this.UserTranslation = allTranslations[game_data.locale] || allTranslations.pt_PT;
-            
-            // FILTRO DEFINITIVO: Remove arqueiros e milícia da lógica
             const forbidden = ['militia', 'archer', 'marcher'];
-            this.availableUnits = (Array.isArray(game_data.units) ? [...game_data.units] : [])
-                                  .filter(u => !forbidden.includes(u));
-
+            this.availableUnits = (Array.isArray(game_data.units) ? [...game_data.units] : []).filter(u => !forbidden.includes(u));
             this.worldConfig = null;
             this.isScavengingWorld = false;
             this.worldConfigFileName = `worldConfigFile_${game_data.world}`;
@@ -191,7 +187,7 @@
             if (typeof webhookURL !== 'string' || !webhookURL.startsWith('https://discord.com/api/webhooks/')) { alert("❌ Webhook inválido!"); return; }
 
             const embedData = {
-                content: `📊 **Poder Militar - ${playerName}**`,
+                content: `📊 **Relatório de Poder Militar - ${playerName}**`,
                 embeds: [
                     {
                         title: `Mundo: ${game_data.world} | Grupo: ${currentGroup}`,
@@ -199,12 +195,12 @@
                         fields: [
                             { 
                                 name: "🛡️ PODER DEFENSIVO", 
-                                value: `**Lanças:** ${this.#formatNumber(total.spear)}\n**Espadas:** ${this.#formatNumber(total.sword)}\n**Pesada:** ${this.#formatNumber(total.heavy)}\n**Catas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                value: `<:lanceiro:1368839513891409972> **Lanças:** ${this.#formatNumber(total.spear)}\n<:espadachim:1368839514746785844> **Espadas:** ${this.#formatNumber(total.sword)}\n<:pesada:1368839517997498398> **Pesada:** ${this.#formatNumber(total.heavy)}\n<:catapulta:1368839516441280573> **Catas:** ${this.#formatNumber(total.catapult)}\n<:paladino:1368332901728391319> **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             },
                             { 
                                 name: "⚔️ PODER OFENSIVO", 
-                                value: `**Vikings:** ${this.#formatNumber(total.axe)}\n**Batedores:** ${this.#formatNumber(total.spy)}\n**Leve:** ${this.#formatNumber(total.light)}\n**Aríetes:** ${this.#formatNumber(total.ram)}\n**Catas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                value: `<:viking:1368839515661139968> **Vikings:** ${this.#formatNumber(total.axe)}\n<:batedor:1368839512423137404> **Batedores:** ${this.#formatNumber(total.spy)}\n<:leve:1368839513077715016> **Leve:** ${this.#formatNumber(total.light)}\n<:ariete:1368839512033038387> **Aríetes:** ${this.#formatNumber(total.ram)}\n<:catapulta:1368839516441280573> **Catas:** ${this.#formatNumber(total.catapult)}\n<:paladino:1368332901728391319> **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             }
                         ],
@@ -214,7 +210,7 @@
             };
 
             $('#dd-send-discord').text('A enviar...').prop('disabled', true);
-            $.ajax({ url: webhookURL, method: 'POST', contentType: 'application/json', data: JSON.stringify(embedData), success: () => { alert("Enviado para Discord!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }, error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); } });
+            $.ajax({ url: webhookURL, method: 'POST', contentType: 'application/json', data: JSON.stringify(embedData), success: () => { alert("Poder Militar enviado!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }, error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); } });
         }
 
         async #createUI() {
@@ -294,7 +290,7 @@
 #dd-root h3 { margin: 0; font-size: 22px; font-weight: bold; }
 #dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; color: #302010; padding: 6px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
 #dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
-#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
+#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; color: #302010; display: inline-flex; gap: 6px; align-items: center; margin-right: 5px; }
 #dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: bold; }
 #dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
 #dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
@@ -316,7 +312,6 @@
             Dialog.show(DIALOG_ID, html, Dialog.close());
             $('#popup_box_' + DIALOG_ID).css('width', 'unset');
             
-            // Build BBCode excluding archers
             let bbCode = `[b]Contagem de Tropas (${this.#getServerTime()})[/b]\n[b]Grupo Atual:[/b] ${this.#getCurrentGroupName()}\n\n`;
             const labels = { spear: 'Lanças', sword: 'Espadas', axe: 'Vikings', spy: 'Batedores', light: 'Leve', heavy: 'Pesada', ram: 'Aríete', catapult: 'Catas', knight: 'Paladino', snob: 'Nobres' };
             Object.entries(total).forEach(([k, v]) => { if(this.availableUnits.includes(k)) bbCode += `[unit]${k}[/unit] [b]${this.#formatNumber(v)}[/b] ${labels[k] || k}\n`; });
