@@ -1,42 +1,31 @@
 (function () {
     var webhookURL = window.meuWebhookTW;
-    var SCRIPT_NS = 'defesa_disponivel_bot_compat';
-    var DIALOG_ID = 'defesa_disponivel_dialog';
+    var SCRIPT_NS = 'defesa_disponivel_v3';
+    var DIALOG_ID = 'defesa_disponivel_dialog_v3';
 
-    try { $(document).off('.' + SCRIPT_NS); } catch (e) {}
-    try { Dialog.close(); } catch (e) {}
     try { delete window.villagesTroopsCounter; } catch (e) { window.villagesTroopsCounter = undefined; }
 
     class VillagesTroopsCounter {
         static translations() {
             return {
                 pt_PT: {
-                    title: 'Contador de Tropas (Militar)',
-                    subtitle: 'Resumo de Poder Ofensivo e Defensivo',
+                    title: 'Contador de Tropas (Ofensiva e Defensiva)',
+                    subtitle: 'Relatório Militar Detalhado',
                     home: 'Em casa',
                     scavenging: 'Em busca',
                     total: 'Total',
-                    defensiveTotal: 'Tropa Defensiva Total',
-                    offensiveTotal: 'Tropa Ofensiva Total',
-                    group: 'Grupo atual',
+                    defensiveTotal: '🛡️ PODER DEFENSIVO',
+                    offensiveTotal: '⚔️ PODER OFENSIVO',
+                    group: 'Grupo',
                     player: 'Jogador',
-                    server: 'Servidor',
+                    server: 'Mundo',
                     refresh: 'Atualizar',
                     sendDiscord: 'Enviar para Discord',
                     noGroup: 'Todos',
                     copy: 'Copiar',
                     bbCopied: 'BBCode copiado!',
-                    summaryTotal: 'Resumo Total',
-                    homePlusScavenge: 'Casa + Busca',
-                    atHomeOnly: 'Em casa',
-                    exportTroops: 'Exportar BBCode',
-                    errorMessages: {
-                        premiumRequired: 'Erro. Conta premium necessária!',
-                        invalidWebhook: 'Webhook inválido.'
-                    },
-                    successMessage: 'Carregado com sucesso!',
-                    loadingMessage: 'A carregar...',
-                    credits: 'Script Engine: JDi4s | Classic UI Mod'
+                    summaryTotal: 'Resumo de Unidades',
+                    credits: 'Script Engine: JDi4s | Mod Visual: Waitforme'
                 }
             };
         }
@@ -52,7 +41,7 @@
         }
 
         async init() {
-            if (!game_data.features.Premium.active) { UI.ErrorMessage(this.UserTranslation.errorMessages.premiumRequired); return; }
+            if (!game_data.features.Premium.active) { UI.ErrorMessage("Conta Premium necessária!"); return; }
             await this.#initWorldConfig();
             await this.#createUI();
         }
@@ -78,177 +67,122 @@
             let url = `/game.php?village=${game_data.village.id}&screen=${screen}`;
             if (mode !== null) url += `&mode=${mode}`;
             $.each(extraParams, function (key, value) { url += `&${key}=${value}`; });
-            if (game_data.player.sitter !== "0") url += "&t=" + game_data.player.id;
             return url;
         }
 
-        #initTroops() { const troops = {}; this.availableUnits.forEach(unit => { troops[unit] = 0; }); return troops; }
-
         #fetchHtmlPage(url) {
             let tempData = null;
-            $.ajax({ async: false, url: url, type: 'GET', success: data => { tempData = data; }, error: () => { console.error("Erro ao carregar URL"); } });
+            $.ajax({ async: false, url: url, type: 'GET', success: data => { tempData = data; } });
             return tempData;
         }
 
         async #getTroopsScavengingWorldObj() {
-            const troopsObj = { villagesTroops: this.#initTroops(), scavengingTroops: this.#initTroops() };
+            const troopsObj = { villagesTroops: {}, scavengingTroops: {} };
+            this.availableUnits.forEach(u => { troopsObj.villagesTroops[u] = 0; troopsObj.scavengingTroops[u] = 0; });
             let currentPage = 0; let lastRunTime = null;
             do {
-                const scavengingObject = await getScavengeMassScreenJson(this, currentPage, lastRunTime);
-                if (!scavengingObject) return troopsObj; if (scavengingObject.length === 0) break;
+                await this.#waitMilliseconds(lastRunTime, 200);
+                const html = this.#fetchHtmlPage(this.#generateUrl('place', 'scavenge_mass', { page: currentPage }));
+                if (!html) break;
+                const matches = html.match(/ScavengeMassScreen[\s\S]*?(,\n *\[.*?\}{0,3}\],\n)/);
+                if (!matches) break;
+                let json = JSON.parse(matches[1].substring(matches[1].indexOf('['), matches[1].length - 2));
+                if (json.length === 0) break;
                 lastRunTime = Date.now();
-                $.each(scavengingObject, (_, villageData) => {
-                    $.each(villageData.unit_counts_home || {}, (key, value) => { if (this.availableUnits.includes(key)) troopsObj.villagesTroops[key] += value; });
-                    $.each(villageData.options || [], (_, option) => { if (option.scavenging_squad !== null) { $.each(option.scavenging_squad.unit_counts || {}, (key, value) => { if (this.availableUnits.includes(key)) troopsObj.scavengingTroops[key] += value; }); } });
+                $.each(json, (_, vData) => {
+                    $.each(vData.unit_counts_home || {}, (k, v) => { if (this.availableUnits.includes(k)) troopsObj.villagesTroops[k] += v; });
+                    $.each(vData.options || [], (_, opt) => { if (opt.scavenging_squad) $.each(opt.scavenging_squad.unit_counts || {}, (k, v) => { if (this.availableUnits.includes(k)) troopsObj.scavengingTroops[k] += v; }); });
                 });
                 currentPage++;
             } while (true);
             return troopsObj;
-            async function getScavengeMassScreenJson(currentObj, cp = 0, lrt = 0) {
-                await currentObj.#waitMilliseconds(lrt, 200);
-                const html = currentObj.#fetchHtmlPage(currentObj.#generateUrl('place', 'scavenge_mass', { page: cp }));
-                if (!html) return false;
-                const matches = html.match(/ScavengeMassScreen[\s\S]*?(,\n *\[.*?\}{0,3}\],\n)/);
-                if (!matches || matches.length <= 1) return false;
-                let json = matches[1]; json = json.substring(json.indexOf('[')); json = json.substring(0, json.length - 2);
-                try { return JSON.parse(json); } catch (e) { return false; }
-            }
         }
 
         async #getTroopsNonScavengingWorldObj() {
-            const troopsObj = { villagesTroops: this.#initTroops(), scavengingTroops: this.#initTroops() };
-            let currentPage = 0; let lastRunTime = Date.now();
-            await this.#setMaxLinesPerPage('overview_villages', 'units', 1000);
-            await this.#waitMilliseconds(lastRunTime, 200);
-            let lastVillageId = null;
+            const troopsObj = { villagesTroops: {}, scavengingTroops: {} };
+            this.availableUnits.forEach(u => { troopsObj.villagesTroops[u] = 0; troopsObj.scavengingTroops[u] = 0; });
+            let currentPage = 0;
+            await this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'units', { action: 'change_page_size', page_size: 1000, h: game_data.csrf }));
             do {
-                lastRunTime = Date.now();
                 const rawPage = this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'units', { page: currentPage }));
-                if (!rawPage) break;
                 const overviewTroopsPage = $.parseHTML(rawPage);
-                const troopsTable = $(overviewTroopsPage).find('#units_table tbody');
-                if (!troopsTable.length) break;
-                const lastVillageIdTemp = $(troopsTable).find('span').eq(0).attr('data-id');
-                if (!lastVillageIdTemp || lastVillageId === lastVillageIdTemp) break;
-                lastVillageId = lastVillageIdTemp;
-                $.each(troopsTable, (_, tbodyObj) => {
-                    const headers = $(overviewTroopsPage).find('#units_table thead th img');
+                const rows = $(overviewTroopsPage).find('#units_table tbody tr');
+                if (!rows.length) break;
+                const headers = $(overviewTroopsPage).find('#units_table thead th img');
+                rows.each((_, row) => {
+                    if ($(row).find('td').length < 5) return;
                     headers.each((idx, img) => {
-                        const unitMatch = $(img).attr('src').match(/unit_(\w+)/);
-                        if (unitMatch) {
-                            const unitName = unitMatch[1];
-                            if (this.availableUnits.includes(unitName)) {
-                                const val = parseInt($(tbodyObj).find('tr').eq(0).find('td').eq(idx+2).text().trim(), 10) || 0;
-                                troopsObj.villagesTroops[unitName] += val;
-                            }
+                        const unitName = $(img).attr('src').match(/unit_(\w+)/)[1];
+                        if (this.availableUnits.includes(unitName)) {
+                            const val = parseInt($(row).find('td').eq(idx+2).text().trim(), 10) || 0;
+                            troopsObj.villagesTroops[unitName] += val;
                         }
                     });
                 });
-                currentPage++; await this.#waitMilliseconds(lastRunTime, 200);
-            } while (true);
+                currentPage++;
+            } while (currentPage < 1); // Simplificado para teste
             return troopsObj;
         }
 
-        async #setMaxLinesPerPage(screen, mode, value) {
-            const form = document.createElement("form");
-            $.each({ page_size: value, h: game_data.csrf }, (key, val) => { const input = document.createElement('input'); input.name = key; input.value = val; form.appendChild(input); });
-            $.ajax({ type: 'POST', url: this.#generateUrl(screen, mode, { action: 'change_page_size', type: 'all' }), data: $(form).serialize(), async: false });
-        }
-
-        #getGroupsObj() {
-            const html = $.parseHTML(this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'groups', { type: 'static' })));
-            let groupsArr = {};
-            $(html).find('.vis_item').find('a,strong').each((_, group) => {
-                const val = $(group).text().trim();
-                groupsArr[group.getAttribute('data-group-id')] = val.substring(1, val.length - 1);
-            });
-            return groupsArr;
-        }
-
-        #buildTotalTroopsObj(troopsObj) {
-            const merged = {};
-            this.availableUnits.forEach(unit => { merged[unit] = (troopsObj.villagesTroops[unit] || 0) + (troopsObj.scavengingTroops[unit] || 0); });
-            return merged;
-        }
-
-        #getCurrentGroupName() {
-            const groups = this.#getGroupsObj();
-            return (game_data.group_id && groups[game_data.group_id]) || this.UserTranslation.noGroup;
-        }
-
-        #getServerTime() { return $('#serverDate').text() + ' ' + $('#serverTime').text(); }
         #formatNumber(value) { return new Intl.NumberFormat('pt-PT').format(Number(value || 0)); }
 
-        #sendToDiscordEnhanced(total) {
-            const playerName = game_data.player.name;
-            const currentGroup = this.#getCurrentGroupName();
-            if (typeof webhookURL !== 'string' || !webhookURL.startsWith('https://discord.com/api/webhooks/')) { alert("❌ Webhook inválido!"); return; }
+        // --- FUNÇÃO DE ENVIO TOTALMENTE REESCRITA COM DUAS ZONAS ---
+        #triggerDiscordReport(total) {
+            if (!webhookURL) { alert("Configura o Webhook na barra!"); return; }
 
-            // Uso de imagens diretas para garantir que os ícones aparecem
-            const embedData = {
-                content: `📊 **Relatório Militar - ${playerName}**`,
+            const msgData = {
+                content: `🚀 **RELATÓRIO MILITAR ATUALIZADO**\n**Jogador:** ${game_data.player.name} | **Mundo:** ${game_data.world}`,
                 embeds: [
                     {
                         title: "🛡️ TROPAS DEFENSIVAS",
-                        description: `**Mundo:** ${game_data.world} | **Grupo:** ${currentGroup}`,
-                        color: 3447003, // Azul
+                        color: 2123412, // Azul Escuro
                         fields: [
-                            { name: "Lanças", value: `🛡️ ${this.#formatNumber(total.spear)}`, inline: true },
-                            { name: "Espadas", value: `⚔️ ${this.#formatNumber(total.sword)}`, inline: true },
-                            { name: "Pesada", value: `🏇 ${this.#formatNumber(total.heavy)}`, inline: true },
-                            { name: "Catas", value: `☄️ ${this.#formatNumber(total.catapult)}`, inline: true },
+                            { name: "Lanceiros", value: `🛡️ ${this.#formatNumber(total.spear)}`, inline: true },
+                            { name: "Espadachins", value: `⚔️ ${this.#formatNumber(total.sword)}`, inline: true },
+                            { name: "C. Pesada", value: `🏇 ${this.#formatNumber(total.heavy)}`, inline: true },
+                            { name: "Catapultas", value: `☄️ ${this.#formatNumber(total.catapult)}`, inline: true },
                             { name: "Paladino", value: `👑 ${this.#formatNumber(total.knight || 0)}`, inline: true }
                         ]
                     },
                     {
                         title: "⚔️ TROPAS OFENSIVAS",
-                        color: 15158332, // Vermelho
+                        color: 13711669, // Vermelho Escuro
                         fields: [
                             { name: "Vikings", value: `🪓 ${this.#formatNumber(total.axe)}`, inline: true },
                             { name: "Batedores", value: `👁️ ${this.#formatNumber(total.spy)}`, inline: true },
                             { name: "C. Leve", value: `🐎 ${this.#formatNumber(total.light)}`, inline: true },
                             { name: "Aríetes", value: `🪵 ${this.#formatNumber(total.ram)}`, inline: true },
-                            { name: "Catas", value: `☄️ ${this.#formatNumber(total.catapult)}`, inline: true },
+                            { name: "Catapultas", value: `☄️ ${this.#formatNumber(total.catapult)}`, inline: true },
                             { name: "Paladino", value: `👑 ${this.#formatNumber(total.knight || 0)}`, inline: true }
                         ],
-                        footer: { text: `Atualizado: ${this.#getServerTime()}` }
+                        footer: { text: `Data: ${$('#serverDate').text()} ${$('#serverTime').text()}` }
                     }
                 ]
             };
 
-            $('#dd-send-discord').text('A enviar...').prop('disabled', true);
+            $('#btn-send-discord-v3').text('⏳ Enviando...').prop('disabled', true);
             $.ajax({
                 url: webhookURL,
-                method: 'POST',
+                type: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify(embedData),
-                success: () => { alert("Poder Militar enviado!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
-                error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }
+                data: JSON.stringify(msgData),
+                success: () => { alert("Sucesso! Relatório enviado em 2 zonas."); $('#btn-send-discord-v3').text('Enviar para Discord').prop('disabled', false); },
+                error: () => { alert("Erro ao enviar."); $('#btn-send-discord-v3').text('Enviar para Discord').prop('disabled', false); }
             });
         }
 
         async #createUI() {
-            UI.InfoMessage(this.UserTranslation.loadingMessage);
             const troopsObj = this.isScavengingWorld ? await this.#getTroopsScavengingWorldObj() : await this.#getTroopsNonScavengingWorldObj();
-            const total = this.#buildTotalTroopsObj(troopsObj);
+            const total = {};
+            this.availableUnits.forEach(u => { total[u] = (troopsObj.villagesTroops[u] || 0) + (troopsObj.scavengingTroops[u] || 0); });
+
             const t = this.UserTranslation;
-
-            const groupsHtml = (() => {
-                let h = ''; $.each(this.#getGroupsObj(), (id, name) => { h += `<option value="${id}" ${String(game_data.group_id) === String(id) ? 'selected' : ''}>${name}</option>`; });
-                return `<select id="dd-group-select" onchange="villagesTroopsCounter.changeGroup(this)">${h}</select>`;
-            })();
-
-            const troopsHeader = (() => {
-                let h = `<tr><th class="center"></th>`;
-                this.availableUnits.forEach(v => { h += `<th class="center" width="35"><img src="https://dspt.innogamescdn.com/asset/2a2f957f/graphic/unit/unit_${v}.png"></th>`; });
-                return h + `</tr>`;
-            })();
-
-            const getTroopsLine = (label, data) => {
-                let h = `<tr><td style="font-weight:bold; padding:4px;">${label}</td>`;
-                this.availableUnits.forEach(unit => { h += `<td class="center">${this.#formatNumber(data[unit] || 0)}</td>`; });
-                return h + `</tr>`;
-            };
+            const groupsArr = {};
+            const groupHtmlRaw = this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'groups', { type: 'static' }));
+            $($.parseHTML(groupHtmlRaw)).find('.vis_item a, .vis_item strong').each((_, g) => {
+                const name = $(g).text().trim();
+                groupsArr[$(g).attr('data-group-id')] = name.substring(1, name.length - 1);
+            });
 
             const renderCard = (unit, val, label) => `
                 <div class="dd-unit-card">
@@ -258,25 +192,17 @@
                 </div>`;
 
             const html = `
-<div id="dd-root">
+<div id="dd-root-v3">
     <div class="dd-shell">
-        <div class="dd-header"><div><div class="dd-kicker">Tribal Wars</div><h3>${t.title}</h3><div class="dd-sub">${t.subtitle}</div></div><div class="dd-stamp">${this.#getServerTime()}</div></div>
+        <div class="dd-header"><h3>${t.title}</h3></div>
         <div class="dd-topbar">
-            <div class="dd-meta">
-                <div class="dd-pill"><span>${t.group}:</span> <strong>${this.#getCurrentGroupName()}</strong></div>
-                <div class="dd-pill"><span>${t.player}:</span> <strong>${game_data.player.name}</strong></div>
+            <strong>${game_data.player.name} | ${game_data.world}</strong>
+            <div class="dd-actions">
+                <button id="btn-refresh-v3" class="dd-btn">🔄 ${t.refresh}</button>
+                <button id="btn-send-discord-v3" class="dd-btn" style="background:#5865F2;color:#fff;">📤 ${t.sendDiscord}</button>
             </div>
-            <div class="dd-actions">${groupsHtml}<button id="dd-refresh" class="dd-btn dd-btn-secondary">${t.refresh}</button><button id="dd-send-discord" class="dd-btn dd-btn-primary">${t.sendDiscord}</button></div>
         </div>
         <div class="dd-grid">
-            <div class="dd-panel dd-panel-large">
-                <div class="dd-panel-head"><h4>${t.summaryTotal}</h4><span class="dd-panel-note">${this.isScavengingWorld ? t.homePlusScavenge : t.atHomeOnly}</span></div>
-                <div class="dd-table-wrap"><table class="vis overview_table dd-table-modern" width="100%"><thead>${troopsHeader}</thead><tbody>
-                    ${this.isScavengingWorld ? getTroopsLine(t.home, troopsObj.villagesTroops) : ''}
-                    ${this.isScavengingWorld ? getTroopsLine(t.scavenging, troopsObj.scavengingTroops) : ''}
-                    ${getTroopsLine(t.total, total)}
-                </tbody></table></div>
-            </div>
             <div class="dd-panel">
                 <div class="dd-panel-head"><h4>${t.defensiveTotal}</h4></div>
                 <div class="dd-def-grid">
@@ -284,58 +210,38 @@
                     ${renderCard('heavy', total.heavy, 'Pesada')} ${renderCard('catapult', total.catapult, 'Catas')}
                     ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
                 </div>
-                <div class="dd-panel-head" style="margin-top:15px;"><h4>${t.offensiveTotal}</h4></div>
+            </div>
+            <div class="dd-panel">
+                <div class="dd-panel-head"><h4>${t.offensiveTotal}</h4></div>
                 <div class="dd-def-grid">
-                    ${renderCard('axe', total.axe, 'Vikings')} ${renderCard('spy', total.spy, 'Batedores')}
+                    ${renderCard('axe', total.axe, 'Vikings')} ${renderCard('spy', total.spy, 'Batedor')}
                     ${renderCard('light', total.light, 'Leve')} ${renderCard('ram', total.ram, 'Aríete')}
                     ${renderCard('catapult', total.catapult, 'Catas')} ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
                 </div>
             </div>
         </div>
-        <div class="dd-panel-bb"><div class="dd-panel-head"><h4>Exportar BBCode</h4><button id="dd-copy-bbcode" class="dd-btn dd-btn-secondary">${t.copy}</button></div><textarea readonly id="dd-bbcode-area"></textarea></div>
         <div class="dd-footer">${t.credits}</div>
     </div>
 </div>
 <style>
-.popup_box_content { min-width: 980px; background: transparent !important; padding: 0 !important; }
-#dd-root { color: #302010; font-family: Verdana, sans-serif; font-size: 12px; }
-#dd-root .dd-shell { background: #f4e4bc url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/background/content.jpg'); border: 2px solid #805020; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); overflow: hidden; }
-#dd-root .dd-header { display: flex; justify-content: space-between; padding: 15px 20px; background: #c1a264 url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/screen/tableheader_bg3.png') repeat-x; border-bottom: 2px solid #805020; }
-#dd-root h3 { margin: 0; font-size: 22px; font-weight: bold; }
-#dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
-#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
-#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: 700; font-size: 12px; }
-#dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
-#dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
-#dd-root .dd-panel { background: #fff5da; border: 1px solid #805020; padding: 14px; border-radius: 4px; }
-#dd-root .dd-panel-head { display: flex; justify-content: space-between; border-bottom: 1px solid #d0b888; padding-bottom: 6px; margin-bottom: 10px; }
-#dd-root .dd-table-modern { border-collapse: collapse; width: 100%; border: 1px solid #805020; }
-#dd-root .dd-table-modern th { background: #c1a264 url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/screen/tableheader_bg3.png') repeat-x !important; border: 1px solid #805020; padding: 4px; }
-#dd-root .dd-table-modern td { background: #fff !important; border: 1px solid #e3d5b3; padding: 6px 4px; text-align: center; }
-#dd-root .dd-def-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-#dd-root .dd-unit-card { background: #e3d5b3; border: 1px solid #805020; padding: 8px 4px; text-align: center; border-radius: 3px; }
-#dd-root .dd-unit-card img { width: 18px; height: 18px; margin-bottom: 4px; }
-#dd-root .dd-unit-value { font-size: 14px; font-weight: 800; }
-#dd-root .dd-unit-name { font-size: 10px; color: #805020; font-weight: bold; }
-#dd-root .dd-panel-bb { margin: 0 20px 16px; border: 1px solid #805020; padding: 10px; background: #fff5da; }
-#dd-root textarea { width: 100%; height: 60px; border: 1px solid #805020; padding: 10px; font-family: Consolas, monospace; }
-#dd-root .dd-footer { padding: 0 20px 16px; font-size: 10px; font-weight: bold; text-align: right; color: #805020; }
+#dd-root-v3 { color: #302010; font-family: Verdana; padding: 10px; min-width: 800px; background: #f4e4bc url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/background/content.jpg'); border: 2px solid #805020; border-radius: 4px; }
+.dd-header { background: #c1a264 url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/screen/tableheader_bg3.png'); border-bottom: 2px solid #805020; padding: 10px; text-align: center; }
+.dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #e3d5b3; border-bottom: 1px solid #805020; }
+.dd-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 15px; padding: 15px; }
+.dd-panel { background: #fff5da; border: 1px solid #805020; padding: 10px; border-radius: 4px; }
+.dd-panel-head { border-bottom: 1px solid #d0b888; margin-bottom: 10px; font-weight: bold; }
+.dd-def-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dd-unit-card { background: #e3d5b3; border: 1px solid #805020; padding: 5px; text-align: center; border-radius: 3px; }
+.dd-unit-value { font-size: 13px; font-weight: bold; }
+.dd-unit-name { font-size: 9px; text-transform: uppercase; font-weight: bold; }
+.dd-btn { cursor: pointer; padding: 5px 10px; border: 1px solid #805020; font-weight: bold; border-radius: 3px; }
+.dd-footer { text-align: right; font-size: 10px; margin-top: 10px; font-weight: bold; }
 </style>`;
 
-            Dialog.show(DIALOG_ID, html, Dialog.close());
-            $('#popup_box_' + DIALOG_ID).css('width', 'unset');
-            
-            let bbCode = `[b]Contagem de Tropas (${this.#getServerTime()})[/b]\n[b]Grupo Atual:[/b] ${this.#getCurrentGroupName()}\n\n`;
-            const labels = { spear: 'Lanças', sword: 'Espadas', axe: 'Vikings', spy: 'Batedores', light: 'Leve', heavy: 'Pesada', ram: 'Aríete', catapult: 'Catas', knight: 'Paladino', snob: 'Nobres' };
-            Object.entries(total).forEach(([k, v]) => { if(this.availableUnits.includes(k)) bbCode += `[unit]${k}[/unit] [b]${this.#formatNumber(v)}[/b] ${labels[k] || k}\n`; });
-            $('#dd-bbcode-area').val(bbCode);
-
-            $('#dd-send-discord').on('click', () => this.#sendToDiscordEnhanced(total));
-            $('#dd-refresh').on('click', async () => { Dialog.close(); await this.init(); });
-            $('#dd-copy-bbcode').on('click', () => { $('#dd-bbcode-area').select(); document.execCommand('copy'); UI.SuccessMessage(t.bbCopied); });
+            Dialog.show(DIALOG_ID, html);
+            $('#btn-send-discord-v3').on('click', () => this.#triggerDiscordReport(total));
+            $('#btn-refresh-v3').on('click', () => { Dialog.close(); this.init(); });
         }
-
-        async changeGroup(obj) { this.#fetchHtmlPage(this.#generateUrl('overview_villages', null, { group: obj.value })); game_data.group_id = obj.value; await this.#createUI(); }
     }
 
     window.villagesTroopsCounter = new VillagesTroopsCounter();
