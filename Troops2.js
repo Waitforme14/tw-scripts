@@ -12,7 +12,7 @@
             return {
                 pt_PT: {
                     title: 'Contador de tropas em casa e em buscas',
-                    subtitle: 'Resumo de Poder Militar (Sem Arqueiros)',
+                    subtitle: 'Resumo de Poder Militar (Filtrado)',
                     home: 'Em casa',
                     scavenging: 'Em busca',
                     total: 'Total',
@@ -50,12 +50,10 @@
             const allTranslations = VillagesTroopsCounter.translations();
             this.UserTranslation = allTranslations[game_data.locale] || allTranslations.pt_PT;
             
-            // FILTRO: Removemos arqueiros da lista global de unidades disponíveis
-            this.availableUnits = Array.isArray(game_data.units) ? [...game_data.units] : [];
-            ['militia', 'archer', 'marcher'].forEach(u => {
-                const idx = this.availableUnits.indexOf(u);
-                if (idx !== -1) this.availableUnits.splice(idx, 1);
-            });
+            // FILTRO DEFINITIVO: Remove arqueiros e milícia da lógica
+            const forbidden = ['militia', 'archer', 'marcher'];
+            this.availableUnits = (Array.isArray(game_data.units) ? [...game_data.units] : [])
+                                  .filter(u => !forbidden.includes(u));
 
             this.worldConfig = null;
             this.isScavengingWorld = false;
@@ -143,13 +141,9 @@
                 if (!lastVillageIdTemp || lastVillageId === lastVillageIdTemp) break;
                 lastVillageId = lastVillageIdTemp;
                 $.each(troopsTable, (_, tbodyObj) => {
-                    const villageTroopsLine = $(tbodyObj).find('tr').eq(0).find('td:gt(1)');
-                    let c = 0;
-                    // Mapeamento correto ignorando colunas de arqueiros se existirem no HTML
                     const headers = $(overviewTroopsPage).find('#units_table thead th img');
                     headers.each((idx, img) => {
-                        const src = $(img).attr('src');
-                        const unitName = src.match(/unit_(\w+)/)[1];
+                        const unitName = $(img).attr('src').match(/unit_(\w+)/)[1];
                         if (this.availableUnits.includes(unitName)) {
                             const val = parseInt($(tbodyObj).find('tr').eq(0).find('td').eq(idx+2).text().trim(), 10) || 0;
                             troopsObj.villagesTroops[unitName] += val;
@@ -169,15 +163,17 @@
 
         #getGroupsObj() {
             const html = $.parseHTML(this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'groups', { type: 'static' })));
-            let groups = $(html).find('.vis_item').find('a,strong');
-            const groupsArr = {};
-            $.each(groups, (_, group) => { const val = $(group).text().trim(); groupsArr[group.getAttribute('data-group-id')] = val.substring(1, val.length - 1); });
+            let groupsArr = {};
+            $(html).find('.vis_item').find('a,strong').each((_, group) => {
+                const val = $(group).text().trim();
+                groupsArr[group.getAttribute('data-group-id')] = val.substring(1, val.length - 1);
+            });
             return groupsArr;
         }
 
         #buildTotalTroopsObj(troopsObj) {
             const merged = {};
-            $.each(troopsObj.villagesTroops, (key, value) => { merged[key] = value + (troopsObj.scavengingTroops[key] || 0); });
+            this.availableUnits.forEach(unit => { merged[unit] = (troopsObj.villagesTroops[unit] || 0) + (troopsObj.scavengingTroops[unit] || 0); });
             return merged;
         }
 
@@ -189,20 +185,13 @@
         #getServerTime() { return $('#serverDate').text() + ' ' + $('#serverTime').text(); }
         #formatNumber(value) { return new Intl.NumberFormat('pt-PT').format(Number(value || 0)); }
 
-        #getTroopsBBCode(totalTroops) {
-            let bbCode = `[b]Contagem de Tropas (${this.#getServerTime()})[/b]\n[b]Grupo Atual:[/b] ${this.#getCurrentGroupName()}\n\n`;
-            const labels = { spear: 'Lanceiros', sword: 'Espadachins', axe: 'Vikings', spy: 'Batedores', light: 'Cavalaria Leve', heavy: 'Cavalaria Pesada', ram: 'Aríetes', catapult: 'Catapultas', knight: 'Paladinos', snob: 'Nobres' };
-            for (let [key, value] of Object.entries(totalTroops)) { if(this.availableUnits.includes(key)) bbCode += `[unit]${key}[/unit] [b]${this.#formatNumber(value)}[/b] ${labels[key] || key}\n`; }
-            return bbCode;
-        }
-
         #sendToDiscordEnhanced(total) {
             const playerName = game_data.player.name;
             const currentGroup = this.#getCurrentGroupName();
             if (typeof webhookURL !== 'string' || !webhookURL.startsWith('https://discord.com/api/webhooks/')) { alert("❌ Webhook inválido!"); return; }
 
             const embedData = {
-                content: `📊 **Relatório de Poder Militar - ${playerName}**`,
+                content: `📊 **Poder Militar - ${playerName}**`,
                 embeds: [
                     {
                         title: `Mundo: ${game_data.world} | Grupo: ${currentGroup}`,
@@ -210,29 +199,22 @@
                         fields: [
                             { 
                                 name: "🛡️ PODER DEFENSIVO", 
-                                value: `• **Lanceiros:** ${this.#formatNumber(total.spear)}\n• **Espadachins:** ${this.#formatNumber(total.sword)}\n• **Cav. Pesada:** ${this.#formatNumber(total.heavy)}\n• **Catapultas:** ${this.#formatNumber(total.catapult)}\n• **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                value: `**Lanças:** ${this.#formatNumber(total.spear)}\n**Espadas:** ${this.#formatNumber(total.sword)}\n**Pesada:** ${this.#formatNumber(total.heavy)}\n**Catas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             },
                             { 
                                 name: "⚔️ PODER OFENSIVO", 
-                                value: `• **Vikings:** ${this.#formatNumber(total.axe)}\n• **Batedores:** ${this.#formatNumber(total.spy)}\n• **Cav. Leve:** ${this.#formatNumber(total.light)}\n• **Aríetes:** ${this.#formatNumber(total.ram)}\n• **Catapultas:** ${this.#formatNumber(total.catapult)}\n• **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                value: `**Vikings:** ${this.#formatNumber(total.axe)}\n**Batedores:** ${this.#formatNumber(total.spy)}\n**Leve:** ${this.#formatNumber(total.light)}\n**Aríetes:** ${this.#formatNumber(total.ram)}\n**Catas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             }
                         ],
-                        footer: { text: `Gerado em: ${this.#getServerTime()}` }
+                        footer: { text: `Tribal Wars | Atualizado em: ${this.#getServerTime()}` }
                     }
                 ]
             };
 
             $('#dd-send-discord').text('A enviar...').prop('disabled', true);
-            $.ajax({
-                url: webhookURL,
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(embedData),
-                success: () => { alert("Poder Militar enviado!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
-                error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }
-            });
+            $.ajax({ url: webhookURL, method: 'POST', contentType: 'application/json', data: JSON.stringify(embedData), success: () => { alert("Enviado para Discord!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }, error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); } });
         }
 
         async #createUI() {
@@ -248,13 +230,13 @@
 
             const troopsHeader = (() => {
                 let h = `<tr><th class="center"></th>`;
-                $.each(this.availableUnits, (_, v) => { h += `<th class="center" width="35"><img src="https://dspt.innogamescdn.com/asset/2a2f957f/graphic/unit/unit_${v}.png"></th>`; });
+                this.availableUnits.forEach(v => { h += `<th class="center" width="35"><img src="https://dspt.innogamescdn.com/asset/2a2f957f/graphic/unit/unit_${v}.png"></th>`; });
                 return h + `</tr>`;
             })();
 
             const getTroopsLine = (label, data) => {
                 let h = `<tr><td style="font-weight:bold; padding:4px;">${label}</td>`;
-                $.each(this.availableUnits, (_, unit) => { h += `<td class="center">${this.#formatNumber(data[unit] || 0)}</td>`; });
+                this.availableUnits.forEach(unit => { h += `<td class="center">${this.#formatNumber(data[unit] || 0)}</td>`; });
                 return h + `</tr>`;
             };
 
@@ -288,24 +270,19 @@
             <div class="dd-panel">
                 <div class="dd-panel-head"><h4>${t.defensiveTotal}</h4></div>
                 <div class="dd-def-grid">
-                    ${renderCard('spear', total.spear, 'Lanceiros')} 
-                    ${renderCard('sword', total.sword, 'Espadas')}
-                    ${renderCard('heavy', total.heavy, 'Pesadas')}
-                    ${renderCard('catapult', total.catapult, 'Catas')} 
+                    ${renderCard('spear', total.spear, 'Lanças')} ${renderCard('sword', total.sword, 'Espadas')}
+                    ${renderCard('heavy', total.heavy, 'Pesada')} ${renderCard('catapult', total.catapult, 'Catas')}
                     ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
                 </div>
                 <div class="dd-panel-head" style="margin-top:15px;"><h4>${t.offensiveTotal}</h4></div>
                 <div class="dd-def-grid">
-                    ${renderCard('axe', total.axe, 'Vikings')} 
-                    ${renderCard('spy', total.spy, 'Batedores')}
-                    ${renderCard('light', total.light, 'Leves')} 
-                    ${renderCard('ram', total.ram, 'Aríetes')} 
-                    ${renderCard('catapult', total.catapult, 'Catas')}
-                    ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
+                    ${renderCard('axe', total.axe, 'Vikings')} ${renderCard('spy', total.spy, 'Batedores')}
+                    ${renderCard('light', total.light, 'Leve')} ${renderCard('ram', total.ram, 'Aríete')}
+                    ${renderCard('catapult', total.catapult, 'Catas')} ${this.availableUnits.includes('knight') ? renderCard('knight', total.knight, 'Paladino') : ''}
                 </div>
             </div>
         </div>
-        <div class="dd-panel-bb"><div class="dd-panel-head"><h4>${t.exportTroops}</h4><button id="dd-copy-bbcode" class="dd-btn dd-btn-secondary">${t.copy}</button></div><textarea readonly id="dd-bbcode-area">${this.#getTroopsBBCode(total).trim()}</textarea></div>
+        <div class="dd-panel-bb"><div class="dd-panel-head"><h4>${t.exportTroops}</h4><button id="dd-copy-bbcode" class="dd-btn dd-btn-secondary">${t.copy}</button></div><textarea readonly id="dd-bbcode-area"></textarea></div>
         <div class="dd-footer">${t.credits}</div>
     </div>
 </div>
@@ -315,12 +292,10 @@
 #dd-root .dd-shell { background: #f4e4bc url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/background/content.jpg'); border: 2px solid #805020; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); overflow: hidden; }
 #dd-root .dd-header { display: flex; justify-content: space-between; padding: 15px 20px; background: #c1a264 url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/screen/tableheader_bg3.png') repeat-x; border-bottom: 2px solid #805020; }
 #dd-root h3 { margin: 0; font-size: 22px; font-weight: bold; }
-#dd-root .dd-sub { margin-top: 4px; color: #503010; font-size: 12px; font-style: italic; }
 #dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; color: #302010; padding: 6px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
 #dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
-#dd-root .dd-pill { background: #fff; border: 1px solid #805020; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
-#dd-root .dd-pill-label { color: #805020; font-weight: bold; font-size: 10px; text-transform: uppercase; }
-#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: 700; font-size: 12px; }
+#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
+#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: bold; }
 #dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
 #dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
 #dd-root .dd-panel { background: #fff5da; border: 1px solid #805020; padding: 14px; border-radius: 4px; }
@@ -334,12 +309,19 @@
 #dd-root .dd-unit-value { font-size: 14px; font-weight: 800; }
 #dd-root .dd-unit-name { font-size: 10px; color: #805020; font-weight: bold; }
 #dd-root .dd-panel-bb { margin: 0 20px 16px; border: 1px solid #805020; padding: 10px; background: #fff5da; }
-#dd-root textarea { width: 100%; height: 80px; border: 1px solid #805020; padding: 10px; font-family: Consolas, monospace; font-size: 11px; }
+#dd-root textarea { width: 100%; height: 60px; border: 1px solid #805020; padding: 10px; font-family: Consolas, monospace; }
 #dd-root .dd-footer { padding: 0 20px 16px; font-size: 10px; font-weight: bold; text-align: right; color: #805020; }
 </style>`;
 
             Dialog.show(DIALOG_ID, html, Dialog.close());
             $('#popup_box_' + DIALOG_ID).css('width', 'unset');
+            
+            // Build BBCode excluding archers
+            let bbCode = `[b]Contagem de Tropas (${this.#getServerTime()})[/b]\n[b]Grupo Atual:[/b] ${this.#getCurrentGroupName()}\n\n`;
+            const labels = { spear: 'Lanças', sword: 'Espadas', axe: 'Vikings', spy: 'Batedores', light: 'Leve', heavy: 'Pesada', ram: 'Aríete', catapult: 'Catas', knight: 'Paladino', snob: 'Nobres' };
+            Object.entries(total).forEach(([k, v]) => { if(this.availableUnits.includes(k)) bbCode += `[unit]${k}[/unit] [b]${this.#formatNumber(v)}[/b] ${labels[k] || k}\n`; });
+            $('#dd-bbcode-area').val(bbCode);
+
             $('#dd-send-discord').on('click', () => this.#sendToDiscordEnhanced(total));
             $('#dd-refresh').on('click', async () => { Dialog.close(); await this.init(); });
             $('#dd-copy-bbcode').on('click', () => { $('#dd-bbcode-area').select(); document.execCommand('copy'); UI.SuccessMessage(t.bbCopied); });
