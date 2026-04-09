@@ -40,7 +40,7 @@
                     },
                     successMessage: 'Carregado com sucesso!',
                     loadingMessage: 'A carregar...',
-                    loadingWorldConfigMessage: 'A carregar configurações...',
+                    loadingWorldConfigMessage: 'A carregar configurações do mundo...',
                     credits: 'Script Engine: JDi4s | Classic UI Mod'
                 }
             };
@@ -181,40 +181,31 @@
             return bbCode;
         }
 
+        // --- FUNÇÃO DE ENVIO REESCRITA PARA UM ÚNICO EMBED (INFALÍVEL) ---
         #sendToDiscordEnhanced(total) {
             const playerName = game_data.player.name;
             const currentGroup = this.#getCurrentGroupName();
             if (typeof webhookURL !== 'string' || !webhookURL.startsWith('https://discord.com/api/webhooks/')) { alert("❌ Webhook inválido!"); return; }
 
             const embedData = {
-                content: `📊 **Poder Militar - ${playerName}** (Mundo: ${game_data.world})`,
+                content: `📊 **Relatório de Poder Militar - ${playerName}**`,
                 embeds: [
                     {
-                        title: "🛡️ TROPAS DEFENSIVAS",
-                        color: 3447003,
+                        title: `Mundo: ${game_data.world} | Grupo: ${currentGroup}`,
+                        color: 15844367, // Dourado
                         fields: [
-                            { name: "🗂️ Grupo", value: currentGroup, inline: false },
-                            { name: "<:lanceiro:1368839513891409972> Lanceiros", value: this.#formatNumber(total.spear), inline: true },
-                            { name: "<:espadachim:1368839514746785844> Espadachins", value: this.#formatNumber(total.sword), inline: true },
-                            { name: "<:arqueiro:1368839511395516416> Arqueiros", value: this.#formatNumber(total.archer), inline: true },
-                            { name: "<:pesada:1368839517997498398> Cav. Pesada", value: this.#formatNumber(total.heavy), inline: true },
-                            { name: "<:catapulta:1368839516441280573> Catapultas", value: this.#formatNumber(total.catapult), inline: true },
-                            { name: "<:paladino:1368332901728391319> Paladino", value: this.#formatNumber(total.knight), inline: true }
+                            { 
+                                name: "🛡️ PODER DEFENSIVO", 
+                                value: `**Lanceiros:** ${this.#formatNumber(total.spear)}\n**Espadachins:** ${this.#formatNumber(total.sword)}\n**Arqueiros:** ${this.#formatNumber(total.archer || 0)}\n**Cav. Pesada:** ${this.#formatNumber(total.heavy)}\n**Catapultas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                inline: true 
+                            },
+                            { 
+                                name: "⚔️ PODER OFENSIVO", 
+                                value: `**Vikings:** ${this.#formatNumber(total.axe)}\n**Batedores:** ${this.#formatNumber(total.spy)}\n**Cav. Leve:** ${this.#formatNumber(total.light)}\n**Arq. Montados:** ${this.#formatNumber(total.marcher || 0)}\n**Aríetes:** ${this.#formatNumber(total.ram)}\n**Catapultas:** ${this.#formatNumber(total.catapult)}\n**Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
+                                inline: true 
+                            }
                         ],
-                        footer: { text: `Gerado em: ${this.#getServerTime()}` }
-                    },
-                    {
-                        title: "⚔️ TROPAS OFENSIVAS",
-                        color: 15158332,
-                        fields: [
-                            { name: "<:viking:1368839515661139968> Vikings", value: this.#formatNumber(total.axe), inline: true },
-                            { name: "<:batedor:1368839512423137404> Batedores", value: this.#formatNumber(total.spy), inline: true },
-                            { name: "<:leve:1368839516441280573> Cav. Leve", value: this.#formatNumber(total.light), inline: true },
-                            { name: "<:montado:1368839511395516416> Arq. Montados", value: this.#formatNumber(total.marcher), inline: true },
-                            { name: "<:ariete:1368839513891409972> Aríetes", value: this.#formatNumber(total.ram), inline: true },
-                            { name: "<:catapulta:1368839516441280573> Catapultas", value: this.#formatNumber(total.catapult), inline: true },
-                            { name: "<:paladino:1368332901728391319> Paladino", value: this.#formatNumber(total.knight), inline: true }
-                        ]
+                        footer: { text: `Tribal Wars | Atualizado em: ${this.#getServerTime()}` }
                     }
                 ]
             };
@@ -225,8 +216,8 @@
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify(embedData),
-                success: () => { alert("Poder Militar enviado para o Discord!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
-                error: () => { alert("Erro ao enviar dados."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }
+                success: () => { alert("Poder Militar enviado!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
+                error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }
             });
         }
 
@@ -307,10 +298,13 @@
 #dd-root .dd-shell { background: #f4e4bc url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/background/content.jpg'); border: 2px solid #805020; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); overflow: hidden; }
 #dd-root .dd-header { display: flex; justify-content: space-between; padding: 15px 20px; background: #c1a264 url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/screen/tableheader_bg3.png') repeat-x; border-bottom: 2px solid #805020; }
 #dd-root h3 { margin: 0; font-size: 22px; font-weight: bold; }
-#dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; padding: 6px 10px; font-weight: bold; }
+#dd-root .dd-sub { margin-top: 4px; color: #503010; font-size: 12px; font-style: italic; }
+#dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; color: #302010; padding: 6px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
 #dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
-#dd-root .dd-pill { background: #fff; border: 1px solid #805020; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
-#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: bold; }
+#dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; color: #302010; display: inline-flex; gap: 6px; margin-right: 5px; }
+#dd-root .dd-pill-label { color: #805020; font-weight: bold; font-size: 10px; text-transform: uppercase; }
+#dd-root .dd-actions select { height: 32px; border-radius: 3px; border: 1px solid #805020; background: #fff; padding: 0 8px; min-width: 180px; }
+#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: 700; font-size: 12px; }
 #dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
 #dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
 #dd-root .dd-panel { background: #fff5da; border: 1px solid #805020; padding: 14px; border-radius: 4px; }
