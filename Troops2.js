@@ -1,65 +1,64 @@
 (function () {
     var webhookURL = window.meuWebhookTW;
-    var SCRIPT_NS = 'militar_matrix_v1';
-    var DIALOG_ID = 'militar_dialog_matrix';
+    // Nomes alterados para forçar a limpeza da cache do Githack/Navegador
+    var SCRIPT_NS = 'militar_neon_gamer_v3';
+    var DIALOG_ID = 'militar_dialog_neon_v3';
 
     try { $(document).off('.' + SCRIPT_NS); } catch (e) {}
     try { Dialog.close(); } catch (e) {}
-    try { delete window.villagesTroopsCounter; } catch (e) { window.villagesTroopsCounter = undefined; }
+    // Limpa a instância antiga
+    try { delete window.militarNeonCore; } catch (e) { window.militarNeonCore = undefined; }
 
-    class VillagesTroopsCounter {
+    class MilitarNeonCore {
         static translations() {
             return {
                 pt_PT: {
-                    title: '> NUCLEO_MILITAR::CONTADOR_TROPAS',
-                    subtitle: 'Análise de Poder Total [CASA + BUSCA]',
-                    home: 'EM_CASA',
-                    scavenging: 'EM_BUSCA',
-                    total: 'TOTAL_SISTEMA',
-                    defensiveTotal: '//_PODER_DEFENSIVO',
-                    offensiveTotal: '//_PODER_OFENSIVO',
+                    title: 'NÚCLEO :: RESUMO MILITAR',
+                    subtitle: 'Análise de Poder Total (Casa + Busca)',
+                    home: 'EM CASA',
+                    scavenging: 'EM BUSCA',
+                    total: 'TOTAL SISTEMA',
+                    defensiveTotal: '🛡️ NÚCLEO DEFENSIVO',
+                    offensiveTotal: '⚔️ NÚCLEO OFENSIVO',
                     group: 'GRUPO',
                     player: 'OPERADOR',
                     server: 'MUNDO',
                     refresh: 'ATUALIZAR',
-                    sendDiscord: 'TRANSMITIR_DISCORD',
+                    sendDiscord: 'TRANSMITIR DISCORD',
                     noGroup: 'TODOS',
-                    copy: 'COPIAR_BB',
+                    copy: 'COPIAR BB',
                     bbCopied: 'BBCode copiado!',
-                    summaryTotal: 'RESUMO_UNIDADES',
-                    credits: 'Script Engine: JDi4s | UI Mod: Matrix Neon'
+                    summaryTotal: 'RESUMO UNIDADES',
+                    credits: 'Script Engine: JDi4s | UI Mod: Gamer Neon'
                 }
             };
         }
 
         constructor() {
-            const allTranslations = VillagesTroopsCounter.translations();
+            const allTranslations = MilitarNeonCore.translations();
             this.UserTranslation = allTranslations[game_data.locale] || allTranslations.pt_PT;
-            // Bloqueio de arqueiros e milícia
+            // Filtro de arqueiros e milícia
             const forbidden = ['militia', 'archer', 'marcher'];
             this.availableUnits = Array.isArray(game_data.units) ? [...game_data.units] : [];
             this.availableUnits = this.availableUnits.filter(u => !forbidden.includes(u));
-            this.worldConfig = null;
             this.isScavengingWorld = false;
         }
 
         async init() {
-            if (!game_data.features.Premium.active) { UI.ErrorMessage("CONTA PREMIUM NECESSÁRIA!"); return; }
+            if (!game_data.features.Premium.active) { UI.ErrorMessage("Conta Premium necessária!"); return; }
             await this.#initWorldConfig();
             await this.#createUI();
         }
 
         async #initWorldConfig() {
             const xml = $.ajax({ async: false, url: '/interface.php?func=get_config', type: 'GET' }).responseText;
-            this.worldConfig = $.parseXML(xml);
-            try { this.isScavengingWorld = this.worldConfig.getElementsByTagName('scavenging')[0].textContent === '1'; } catch (e) { throw e; }
+            try { this.isScavengingWorld = $($.parseXML(xml)).find('scavenging').text() === '1'; } catch (e) { throw e; }
         }
 
         #generateUrl(screen, mode = null, extraParams = {}) {
             let url = `/game.php?village=${game_data.village.id}&screen=${screen}`;
             if (mode !== null) url += `&mode=${mode}`;
             $.each(extraParams, function (key, value) { url += `&${key}=${value}`; });
-            if (game_data.player.sitter !== "0") url += "&t=" + game_data.player.id;
             return url;
         }
 
@@ -85,11 +84,11 @@
                 if (!isHome && !isScav) return;
 
                 $(row).find('td:gt(1)').each((idx, td) => {
-                    const unit = game_data.units[idx];
-                    if (this.availableUnits.includes(unit)) {
+                    const unitName = game_data.units[idx];
+                    if (this.availableUnits.includes(unitName)) {
                         const val = parseInt($(td).text().trim().replace(/\./g, ''), 10) || 0;
-                        if (isHome) troopsObj.villages[unit] += val;
-                        if (isScav) troopsObj.scavenging[unit] += val;
+                        if (isHome) troopsObj.villages[unitName] += val;
+                        if (isScav) troopsObj.scavenging[unitName] += val;
                     }
                 });
             });
@@ -99,18 +98,18 @@
         #sendToDiscordEnhanced(total) {
             if (!webhookURL) { alert("CONFIGURA O WEBHOOK!"); return; }
             const payload = {
-                content: `📶 **TRANSMISSÃO MILITAR - ${game_data.player.name}** (Mundo: ${game_data.world})`,
+                content: `📊 **RESUMO MILITAR GAMER - ${game_data.player.name}** (Mundo: ${game_data.world})`,
                 embeds: [
                     {
-                        title: "🛡️ NÚCLEO DEFENSIVO",
-                        color: 65280, // Verde Neon para o Discord
+                        title: "🛡️ TROPAS DEFENSIVAS",
+                        color: 3447003, // Azul para o Discord
                         fields: [{ name: "STATUS", value: `🛡️ **Lanças:** ${this.#formatNumber(total.spear)}\n⚔️ **Espadas:** ${this.#formatNumber(total.sword)}\n🏇 **Pesada:** ${this.#formatNumber(total.heavy)}\n☄️ **Catas:** ${this.#formatNumber(total.catapult)}\n👑 **Paladino:** ${this.#formatNumber(total.knight || 0)}`, inline: true }]
                     },
                     {
-                        title: "⚔️ NÚCLEO OFENSIVO",
-                        color: 16711680, // Vermelho para o Discord (contraste)
-                        fields: [{ name: "STATUS", value: `🪓 **Vikings:** ${this.#formatNumber(total.axe)}\n👁️ **Batedor:** ${this.#formatNumber(total.spy)}\n🐎 **Leve:** ${this.#formatNumber(total.light)}\n🪵 **Aríete:** ${this.#formatNumber(total.ram)}\n☄️ **Catas:** ${this.#formatNumber(total.catapult)}\n👑 **Paladino:** ${this.#formatNumber(total.knight || 0)}`, inline: true }],
-                        footer: { text: `Grupo: ${$('.vis_item strong').text() || 'Todos'} | SINC: ${$('#serverTime').text()}` }
+                        title: "⚔️ TROPAS OFENSIVAS",
+                        color: 15158332, // Vermelho para o Discord
+                        fields: [{ name: "STATUS", value: `🪓 **Vikings:** ${this.#formatNumber(total.axe)}\n👁️ **Batedor:** ${this.#formatNumber(total.spy)}\n🐎 **Leve:** ${this.#formatNumber(total.light)}\n🪵 **Aríetes:** ${this.#formatNumber(total.ram)}\n☄️ **Catas:** ${this.#formatNumber(total.catapult)}\n👑 **Paladino:** ${this.#formatNumber(total.knight || 0)}`, inline: true }],
+                        footer: { text: `Grupo: ${$('.vis_item strong').text() || 'Todos'} | Data: ${$('#serverTime').text()}` }
                     }
                 ]
             };
@@ -124,125 +123,131 @@
             const t = this.UserTranslation;
 
             const renderCard = (unit, val, label) => `
-                <div class="matrix-unit-card">
+                <div class="neon-unit-card">
                     <img src="https://dspt.innogamescdn.com/asset/2a2f957f/graphic/unit/unit_${unit}.png">
-                    <div class="matrix-unit-value">${this.#formatNumber(val)}</div>
-                    <div class="matrix-unit-name">> ${label}</div>
+                    <div class="neon-unit-value">${this.#formatNumber(val)}</div>
+                    <div class="neon-unit-name">${label}</div>
                 </div>`;
 
             const html = `
-<div id="matrix-root">
-    <div class="matrix-shell">
-        <div class="matrix-header">
+<div id="neon-root">
+    <div class="neon-shell">
+        <div class="neon-header">
             <h3>${t.title}</h3>
-            <div class="matrix-stamp">[${$('#serverDate').text()} ${$('#serverTime').text()}]</div>
+            <div class="neon-stamp">[ ${$('#serverDate').text()} ${$('#serverTime').text()} ]</div>
         </div>
-        <div class="matrix-topbar">
+        <div class="neon-topbar">
             <span>${t.player}: <strong>${game_data.player.name}</strong> | ${t.server}: <strong>${game_data.world}</strong></span>
-            <div class="matrix-actions">
-                <button id="matrix-refresh" class="matrix-btn">_ ${t.refresh}</button>
-                <button id="matrix-send-discord" class="matrix-btn matrix-btn-discord">_ ${t.sendDiscord}</button>
+            <div class="neon-actions">
+                <button id="neon-refresh" class="neon-btn neon-btn-sec">_ ${t.refresh}</button>
+                <button id="neon-send-discord" class="neon-btn neon-btn-pri">_ ${t.sendDiscord}</button>
             </div>
         </div>
-        <div class="matrix-grid">
-            <div class="matrix-panel matrix-panel-large">
-                <div class="matrix-panel-head"><h4>> ${t.summaryTotal}</h4></div>
-                <div class="matrix-table-wrap"><table class="matrix-table modern" width="100%"><thead>
+        <div class="neon-grid">
+            <div class="neon-panel neon-panel-large">
+                <div class="neon-panel-head"><h4>> ${t.summaryTotal}</h4></div>
+                <div class="neon-table-wrap"><table class="neon-table modern" width="100%"><thead>
                     <tr><th></th>${this.availableUnits.map(v => `<th class="center"><img src="https://dspt.innogamescdn.com/asset/2a2f957f/graphic/unit/unit_${v}.png"></th>`).join('')}</tr>
                 </thead><tbody>
-                    ${this.isScavengingWorld ? `<tr><td class="matrix-label">${t.home}</td>${this.availableUnits.map(u => `<td class="center">${this.#formatNumber(data.villages[u])}</td>`).join('')}</tr>` : ''}
-                    ${this.isScavengingWorld ? `<tr><td class="matrix-label">${t.scavenging}</td>${this.availableUnits.map(u => `<td class="center">${this.#formatNumber(data.scavenging[u])}</td>`).join('')}</tr>` : ''}
-                    <tr><td class="matrix-label matrix-total">${t.total}</td>${this.availableUnits.map(u => `<td class="center matrix-total">${this.#formatNumber(total[u])}</td>`).join('')}</tr>
+                    ${this.isScavengingWorld ? `<tr><td class="neon-label">${t.home}</td>${this.availableUnits.map(u => `<td class="center">${this.#formatNumber(data.villages[u])}</td>`).join('')}</tr>` : ''}
+                    ${this.isScavengingWorld ? `<tr><td class="neon-label">${t.scavenging}</td>${this.availableUnits.map(u => `<td class="center">${this.#formatNumber(data.scavenging[u])}</td>`).join('')}</tr>` : ''}
+                    <tr><td class="neon-label neon-total">${t.total}</td>${this.availableUnits.map(u => `<td class="center neon-total">${this.#formatNumber(total[u])}</td>`).join('')}</tr>
                 </tbody></table></div>
             </div>
-            <div class="matrix-panel matrix-panel-small">
-                <div class="matrix-panel-head"><h4>${t.defensiveTotal}</h4></div>
-                <div class="matrix-def-grid">
+            <div class="neon-panel neon-panel-small">
+                <div class="neon-panel-head"><h4>${t.defensiveTotal}</h4></div>
+                <div class="neon-def-grid">
                     ${renderCard('spear', total.spear, 'LANÇAS')} ${renderCard('sword', total.sword, 'ESPADAS')}
                     ${renderCard('heavy', total.heavy, 'PESADA')} ${renderCard('catapult', total.catapult, 'CATAS')}
-                    ${renderCard('knight', total.knight || 0, 'PALADINO')}
+                    ${total.knight !== undefined ? renderCard('knight', total.knight, 'PALADINO') : ''}
                 </div>
-                <div class="matrix-panel-head" style="margin-top:15px;"><h4>${t.offensiveTotal}</h4></div>
-                <div class="matrix-def-grid">
+                <div class="neon-panel-head" style="margin-top:20px;"><h4>${t.offensiveTotal}</h4></div>
+                <div class="neon-def-grid">
                     ${renderCard('axe', total.axe, 'VIKINGS')} ${renderCard('spy', total.spy, 'BATEDOR')}
                     ${renderCard('light', total.light, 'LEVE')} ${renderCard('ram', total.ram, 'ARÍETE')}
-                    ${renderCard('catapult', total.catapult, 'CATAS')} ${renderCard('knight', total.knight || 0, 'PALADINO')}
+                    ${renderCard('catapult', total.catapult, 'CATAS')} ${total.knight !== undefined ? renderCard('knight', total.knight, 'PALADINO') : ''}
                 </div>
             </div>
         </div>
-        <div class="matrix-bbcode-wrap"><button id="matrix-bbcode" class="matrix-btn">_ COPIAR_BBCODE</button><textarea id="matrix-textarea" readonly></textarea></div>
-        <div class="matrix-footer">${t.credits}</div>
-    </div>
+        <div class="neon-bbcode-wrap"><button id="neon-copy-bbcode" class="neon-btn neon-btn-sec">_ ${t.copy}</button><textarea id="neon-textarea" readonly></textarea></div>
+        <div class="neon-footer">${t.credits}</div>
+        </div>
 </div>
 <style>
-/* Reset Global do Popup */
-.popup_box_content { min-width: 900px !important; background: transparent !important; padding: 0 !important; border: none !important; }
-.popup_box_close { background-color: #00ff00 !important; border-radius: 0 !important; }
+/* Reset Global do Popup e Estilo Arredondado Neon */
+.popup_box_content { min-width: 950px !important; background: transparent !important; padding: 0 !important; border: none !important; }
+.popup_box_close { background-color: #00ff88 !important; border-radius: 50% !important; margin: 10px !important; }
 
-/* Visual Matrix Neon */
-#matrix-root { color: #00ff00; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; background-color: #0a0a0a; }
-.matrix-shell { border: 2px solid #00ff00; border-radius: 0; box-shadow: 0 0 15px rgba(0, 255, 0, 0.6); overflow: hidden; }
-.matrix-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #161616; border-bottom: 2px solid #00ff00; }
-.matrix-header h3 { margin: 0; font-size: 18px; color: #00ff00; font-weight: bold; text-transform: uppercase; text-shadow: 0 0 5px #00ff00; }
-.matrix-stamp { color: #008800; font-size: 11px; }
-.matrix-topbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 15px; background: #000; border-bottom: 1px solid #00ff00; color: #00aa00; }
-.matrix-pill strong { color: #00ff00; text-shadow: 0 0 3px #00ff00; }
+/* Visual Futurista Arredondado */
+#neon-root { color: #a0ffcc; font-family: 'Segoe UI', 'Roboto', 'Verdana', sans-serif; font-size: 13px; background-color: #080808; padding: 10px; border-radius: 12px; }
+.neon-shell { border: 2px solid #00ff88; border-radius: 12px; box-shadow: 0 0 20px rgba(0, 255, 136, 0.5); overflow: hidden; }
+.neon-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: #121212; border-bottom: 2px solid #00ff88; }
+.neon-header h3 { margin: 0; font-size: 20px; color: #00ff88; font-weight: 800; text-transform: uppercase; text-shadow: 0 0 8px #00ff88; }
+.neon-stamp { color: #008855; font-size: 11px; font-family: 'Consolas', monospace; }
+.neon-topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #000; border-bottom: 1px solid #006644; color: #00bb66; }
+.neon-topbar strong { color: #00ff88; text-shadow: 0 0 3px #00ff88; }
 
-/* Botões Neon */
-.matrix-btn { height: 28px; padding: 0 12px; border: 1px solid #00ff00; cursor: pointer; font-weight: bold; background: #000; color: #00ff00; font-family: inherit; font-size: 11px; text-transform: uppercase; transition: all 0.2s; }
-.matrix-btn:hover { background: #003300; box-shadow: 0 0 10px #00ff00; }
-.matrix-btn-discord { border-color: #5865F2; color: #5865F2; }
-.matrix-btn-discord:hover { background: #1a1d3a; box-shadow: 0 0 10px #5865F2; }
+/* Botões Arredondados */
+.neon-btn { height: 32px; padding: 0 16px; border: 1px solid #00ff88; cursor: pointer; font-weight: 800; border-radius: 16px; background: #000; color: #00ff88; font-family: inherit; font-size: 11px; text-transform: uppercase; transition: all 0.2s; }
+.neon-btn:hover { background: #003311; box-shadow: 0 0 12px #00ff88; }
+.neon-btn-pri { background: #00ff88; color: #000; }
+.neon-btn-pri:hover { background: #00cc66; color: #fff; box-shadow: 0 0 15px #00ff88; }
+.neon-btn-sec { border-color: #00ff88; color: #00ff88; }
+.neon-actions select { height: 32px; border-radius: 16px; border: 1px solid #00ff88; background: #121212; color: #a0ffcc; padding: 0 10px; font-family: inherit; }
 
-/* Grelha e Painéis */
-.matrix-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 15px; padding: 15px; }
-.matrix-panel { background: #111; border: 1px solid #00aa00; padding: 10px; }
-.matrix-panel:hover { border-color: #00ff00; box-shadow: 0 0 8px rgba(0, 255, 0, 0.3); }
-.matrix-panel-head { border-bottom: 1px solid #00ff00; margin-bottom: 10px; padding-bottom: 3px; }
-.matrix-panel-head h4 { margin: 0; color: #00ff00; font-size: 13px; text-transform: uppercase; text-shadow: 0 0 3px #00ff00; }
+/* Grelha e Painéis Arredondados */
+.neon-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 15px; padding: 15px; }
+.neon-panel { background: #121212; border: 1px solid #006644; padding: 15px; border-radius: 12px; transition: border-color 0.2s; }
+.neon-panel:hover { border-color: #00ff88; box-shadow: 0 0 10px rgba(0, 255, 136, 0.2); }
+.neon-panel-head { border-bottom: 1px solid #006644; margin-bottom: 12px; padding-bottom: 5px; }
+.neon-panel-head h4 { margin: 0; color: #00ff88; font-size: 14px; text-transform: uppercase; text-shadow: 0 0 5px #00ff88; }
 
-/* Tabela Matrix */
-.matrix-table { border-collapse: collapse; background: #000; border: 1px solid #008800; }
-.matrix-table th { background: #161616 !important; border: 1px solid #008800; padding: 5px; color: #00ff00; }
-.matrix-table td { border: 1px solid #004400; padding: 6px; text-align: center; color: #00cc00; }
-.matrix-label { text-align: left !important; color: #00aa00; font-weight: bold; }
-.matrix-total { color: #00ff00 !important; font-weight: bold; background: #001100; text-shadow: 0 0 3px #00ff00; }
+/* Tabela Neon Arredondada */
+.neon-table-wrap { border-radius: 8px; overflow: hidden; border: 1px solid #006644; }
+.neon-table { border-collapse: collapse; background: #000; border: none; }
+.neon-table th { background: #161616 !important; border: 1px solid #006644; padding: 8px; color: #00ff88; }
+.neon-table td { border: 1px solid #003322; padding: 8px; text-align: center; color: #a0ffcc; }
+.neon-table img { width: 18px; height: 18px; }
+.neon-label { text-align: left !important; color: #00bb66; font-weight: bold; }
+.neon-total { color: #00ff88 !important; font-weight: bold; background: #001100; text-shadow: 0 0 3px #00ff88; border-color: #006644; }
 
-/* Cartas Matrix */
-.matrix-def-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.matrix-unit-card { background: #000; border: 1px solid #00aa00; padding: 5px 2px; text-align: center; transition: all 0.2s; }
-.matrix-unit-card:hover { border-color: #00ff00; box-shadow: 0 0 5px #00ff00; background: #001100; }
-.matrix-unit-card img { width: 16px; height: 16px; margin-bottom: 3px; filter: sepia(100%) saturate(300%) hue-rotate(80deg); /* Efeito verde nas imagens */ }
-.matrix-unit-value { font-size: 13px; font-weight: bold; color: #00ff00; text-shadow: 0 0 3px #00ff00; }
-.matrix-unit-name { font-size: 9px; color: #00aa00; font-weight: bold; text-transform: uppercase; }
+/* Cartas de Unidade Arredondadas */
+.neon-def-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.neon-unit-card { background: #000; border: 1px solid #006644; padding: 8px 5px; text-align: center; border-radius: 10px; transition: all 0.2s; }
+.neon-unit-card:hover { border-color: #00ff88; box-shadow: 0 0 8px #00ff88; background: #001100; }
+.neon-unit-card img { width: 22px; height: 22px; margin-bottom: 5px; filter: sepia(0%) !important; /* Remove o filtro verde antigo */ }
+.neon-unit-value { font-size: 14px; font-weight: bold; color: #fff; text-shadow: 0 0 3px #00ff88; }
+.neon-unit-name { font-size: 9px; color: #00bb66; font-weight: bold; text-transform: uppercase; margin-top: 2px; }
 
 /* BBCode */
-.matrix-bbcode-wrap { padding: 0 15px 15px; display: flex; flex-direction: column; gap: 5px; }
-.matrix-bbcode-wrap textarea { background: #000; border: 1px solid #008800; color: #00cc00; font-family: inherit; font-size: 11px; height: 40px; padding: 5px; resize: none; }
-.matrix-bbcode-wrap textarea:focus { border-color: #00ff00; outline: none; }
+.neon-bbcode-wrap { padding: 0 15px 15px; display: flex; flex-direction: column; gap: 8px; }
+.neon-bbcode-wrap textarea { background: #000; border: 1px solid #006644; color: #a0ffcc; font-family: 'Consolas', monospace; font-size: 11px; height: 50px; padding: 8px; resize: none; border-radius: 8px; }
+.neon-bbcode-wrap textarea:focus { border-color: #00ff88; outline: none; box-shadow: 0 0 8px #00ff88; }
 
-.matrix-footer { padding: 8px 15px; text-align: right; font-size: 10px; font-weight: bold; color: #006600; border-top: 1px solid #004400; background: #161616; }
+.neon-footer { padding: 8px 20px; text-align: right; font-size: 10px; font-weight: bold; color: #006644; border-top: 1px solid #004400; background: #121212; border-radius: 0 0 12px 12px; }
 </style>`;
 
             Dialog.show(DIALOG_ID, html);
             $('#popup_box_' + DIALOG_ID).css('width', 'unset');
 
-            // Gerar BBCode Filtrado
-            let bbCode = `[b]SISTEMA::RELATÓRIO_MILITAR [${$('#serverTime').text()}]
+            // Gerar BBCode Filtrado (Apenas unidades ativas > 0)
+            let bbCode = `[b]NÚCLEO::RELATÓRIO_MILITAR [${$('#serverTime').text()}]
 [b]OPERADOR:[/b] ${game_data.player.name}
 [b]MUNDO:[/b] ${game_data.world}
 ----------------------------------
 `;
             const labels = { spear: 'Lanças', sword: 'Espadas', axe: 'Vikings', spy: 'Batedor', light: 'Leve', heavy: 'Pesada', ram: 'Aríete', catapult: 'Catas', knight: 'Paladino', snob: 'Nobres' };
             Object.entries(total).forEach(([k, v]) => { if(this.availableUnits.includes(k) && v > 0) bbCode += `[unit]${k}[/unit] [b]${this.#formatNumber(v)}[/b] ${labels[k] || k}\n`; });
-            $('#matrix-textarea').val(bbCode);
+            $('#neon-textarea').val(bbCode);
 
             // Eventos
-            $('#matrix-send-discord').on('click', () => this.#sendToDiscordEnhanced(total));
-            $('#matrix-refresh').on('click', () => { Dialog.close(); this.init(); });
-            $('#matrix-bbcode').on('click', () => { $('#matrix-textarea').select(); document.execCommand('copy'); UI.SuccessMessage("BBCODE COPIADO!"); });
+            $('#neon-send-discord').on('click', () => this.#sendToDiscordEnhanced(total));
+            $('#neon-refresh').on('click', () => { Dialog.close(); this.init(); });
+            $('#neon-copy-bbcode').on('click', () => { $('#neon-textarea').select(); document.execCommand('copy'); UI.SuccessMessage("BBCODE COPIADO!"); });
         }
     }
 
-    new VillagesTroopsCounter().init();
+    // Instancia a nova classe para garantir que carrega o código novo
+    window.militarNeonCore = new MilitarNeonCore();
+    window.militarNeonCore.init();
 })();
