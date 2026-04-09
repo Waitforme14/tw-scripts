@@ -40,7 +40,7 @@
                     },
                     successMessage: 'Transmissão concluída!',
                     loadingMessage: 'Sincronizando dados...',
-                    credits: 'Core: JDi4s | UI: Neon Modern'
+                    credits: 'Waitforme | UI: Neon Modern'
                 }
             };
         }
