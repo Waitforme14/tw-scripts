@@ -27,7 +27,7 @@
                     copy: 'COPIAR_BB',
                     bbCopied: 'BBCode copiado!',
                     summaryTotal: 'RESUMO_UNIDADES',
-                    credits: 'Script Engine: JDi4s | UI Mod: Matrix Neon'
+                    credits: 'Waitforme | UI Mod: Matrix Neon'
                 }
             };
         }
