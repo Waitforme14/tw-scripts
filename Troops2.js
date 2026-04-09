@@ -29,7 +29,7 @@
                     copy: 'COPIAR BB',
                     bbCopied: 'BBCode copiado!',
                     summaryTotal: 'RESUMO UNIDADES',
-                    credits: 'Script Engine: JDi4s | UI Mod: Gamer Neon'
+                    credits: 'Script Engine: Waitforme | UI Mod: Gamer Neon'
                 }
             };
         }
