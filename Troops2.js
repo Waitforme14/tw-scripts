@@ -12,7 +12,7 @@
             return {
                 pt_PT: {
                     title: 'Contador de Tropas (Militar)',
-                    subtitle: 'Análise de Poder Ofensivo e Defensivo',
+                    subtitle: 'Resumo de Poder Ofensivo e Defensivo',
                     home: 'Em casa',
                     scavenging: 'Em busca',
                     total: 'Total',
@@ -28,6 +28,7 @@
                     bbCopied: 'BBCode copiado!',
                     summaryTotal: 'Resumo Total',
                     homePlusScavenge: 'Casa + Busca',
+                    atHomeOnly: 'Em casa',
                     exportTroops: 'Exportar BBCode',
                     errorMessages: {
                         premiumRequired: 'Erro. Conta premium necessária!',
@@ -183,36 +184,32 @@
             const currentGroup = this.#getCurrentGroupName();
             if (typeof webhookURL !== 'string' || !webhookURL.startsWith('https://discord.com/api/webhooks/')) { alert("❌ Webhook inválido!"); return; }
 
-            // EMOJIS UNIVERSAIS (Garante que vês sempre o ícone)
-            const icon = {
-                spear: '🛡️',
-                sword: '⚔️',
-                axe: '🪓',
-                spy: '👁️',
-                light: '🐎',
-                heavy: '🏇',
-                ram: '🪵',
-                catapult: '☄️',
-                knight: '👑'
-            };
-
+            // Uso de imagens diretas para garantir que os ícones aparecem
             const embedData = {
                 content: `📊 **Relatório Militar - ${playerName}**`,
                 embeds: [
                     {
-                        title: `Mundo: ${game_data.world} | Grupo: ${currentGroup}`,
-                        color: 15844367,
+                        title: "🛡️ TROPAS DEFENSIVAS",
+                        description: `**Mundo:** ${game_data.world} | **Grupo:** ${currentGroup}`,
+                        color: 3447003, // Azul
                         fields: [
-                            { 
-                                name: "🛡️ PODER DEFENSIVO", 
-                                value: `${icon.spear} **Lanças:** ${this.#formatNumber(total.spear)}\n${icon.sword} **Espadas:** ${this.#formatNumber(total.sword)}\n${icon.heavy} **Pesada:** ${this.#formatNumber(total.heavy)}\n${icon.catapult} **Catas:** ${this.#formatNumber(total.catapult)}\n${icon.knight} **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
-                                inline: true 
-                            },
-                            { 
-                                name: "⚔️ PODER OFENSIVO", 
-                                value: `${icon.axe} **Vikings:** ${this.#formatNumber(total.axe)}\n${icon.spy} **Batedores:** ${this.#formatNumber(total.spy)}\n${icon.light} **Leve:** ${this.#formatNumber(total.light)}\n${icon.ram} **Aríetes:** ${this.#formatNumber(total.ram)}\n${icon.catapult} **Catas:** ${this.#formatNumber(total.catapult)}\n${icon.knight} **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
-                                inline: true 
-                            }
+                            { name: "Lanças", value: `🛡️ ${this.#formatNumber(total.spear)}`, inline: true },
+                            { name: "Espadas", value: `⚔️ ${this.#formatNumber(total.sword)}`, inline: true },
+                            { name: "Pesada", value: `🏇 ${this.#formatNumber(total.heavy)}`, inline: true },
+                            { name: "Catas", value: `☄️ ${this.#formatNumber(total.catapult)}`, inline: true },
+                            { name: "Paladino", value: `👑 ${this.#formatNumber(total.knight || 0)}`, inline: true }
+                        ]
+                    },
+                    {
+                        title: "⚔️ TROPAS OFENSIVAS",
+                        color: 15158332, // Vermelho
+                        fields: [
+                            { name: "Vikings", value: `🪓 ${this.#formatNumber(total.axe)}`, inline: true },
+                            { name: "Batedores", value: `👁️ ${this.#formatNumber(total.spy)}`, inline: true },
+                            { name: "C. Leve", value: `🐎 ${this.#formatNumber(total.light)}`, inline: true },
+                            { name: "Aríetes", value: `🪵 ${this.#formatNumber(total.ram)}`, inline: true },
+                            { name: "Catas", value: `☄️ ${this.#formatNumber(total.catapult)}`, inline: true },
+                            { name: "Paladino", value: `👑 ${this.#formatNumber(total.knight || 0)}`, inline: true }
                         ],
                         footer: { text: `Atualizado: ${this.#getServerTime()}` }
                     }
@@ -220,7 +217,14 @@
             };
 
             $('#dd-send-discord').text('A enviar...').prop('disabled', true);
-            $.ajax({ url: webhookURL, method: 'POST', contentType: 'application/json', data: JSON.stringify(embedData), success: () => { alert("Enviado para Discord!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }, error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); } });
+            $.ajax({
+                url: webhookURL,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(embedData),
+                success: () => { alert("Poder Militar enviado!"); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); },
+                error: () => { alert("Erro ao enviar."); $('#dd-send-discord').text('Enviar para Discord').prop('disabled', false); }
+            });
         }
 
         async #createUI() {
@@ -288,7 +292,7 @@
                 </div>
             </div>
         </div>
-        <div class="dd-panel-bb"><div class="dd-panel-head"><h4>BBCode</h4><button id="dd-copy-bbcode" class="dd-btn dd-btn-secondary">${t.copy}</button></div><textarea readonly id="dd-bbcode-area"></textarea></div>
+        <div class="dd-panel-bb"><div class="dd-panel-head"><h4>Exportar BBCode</h4><button id="dd-copy-bbcode" class="dd-btn dd-btn-secondary">${t.copy}</button></div><textarea readonly id="dd-bbcode-area"></textarea></div>
         <div class="dd-footer">${t.credits}</div>
     </div>
 </div>
@@ -298,10 +302,9 @@
 #dd-root .dd-shell { background: #f4e4bc url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/background/content.jpg'); border: 2px solid #805020; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.4); overflow: hidden; }
 #dd-root .dd-header { display: flex; justify-content: space-between; padding: 15px 20px; background: #c1a264 url('https://dspt.innogamescdn.com/asset/2a2f957f/graphic/screen/tableheader_bg3.png') repeat-x; border-bottom: 2px solid #805020; }
 #dd-root h3 { margin: 0; font-size: 22px; font-weight: bold; }
-#dd-root .dd-stamp { background: #fff5da; border: 1px solid #805020; color: #302010; padding: 6px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
 #dd-root .dd-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #e3d5b3; border-bottom: 1px solid #805020; }
 #dd-root .dd-pill { background: #fff; border: 1px solid #805020; border-radius: 3px; padding: 6px 10px; display: inline-flex; gap: 6px; margin-right: 5px; }
-#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: bold; }
+#dd-root .dd-btn { height: 32px; padding: 0 12px; border: 1px solid #805020; cursor: pointer; font-weight: 700; font-size: 12px; }
 #dd-root .dd-btn-primary { background: #5865F2; color: #fff; border-color: #4752C4; }
 #dd-root .dd-grid { display: grid; grid-template-columns: 1.4fr .9fr; gap: 16px; padding: 16px 20px; }
 #dd-root .dd-panel { background: #fff5da; border: 1px solid #805020; padding: 14px; border-radius: 4px; }
@@ -315,7 +318,7 @@
 #dd-root .dd-unit-value { font-size: 14px; font-weight: 800; }
 #dd-root .dd-unit-name { font-size: 10px; color: #805020; font-weight: bold; }
 #dd-root .dd-panel-bb { margin: 0 20px 16px; border: 1px solid #805020; padding: 10px; background: #fff5da; }
-#dd-root textarea { width: 100%; height: 50px; border: 1px solid #805020; padding: 10px; font-family: Consolas, monospace; }
+#dd-root textarea { width: 100%; height: 60px; border: 1px solid #805020; padding: 10px; font-family: Consolas, monospace; }
 #dd-root .dd-footer { padding: 0 20px 16px; font-size: 10px; font-weight: bold; text-align: right; color: #805020; }
 </style>`;
 
