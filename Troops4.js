@@ -1,7 +1,7 @@
 (function () {
     var webhookURL = window.meuWebhookTW;
-    var SCRIPT_NS = 'neon_militar_final_v10_nukes';
-    var DIALOG_ID = 'dialog_neon_v10_nukes';
+    var SCRIPT_NS = 'neon_militar_final_v14';
+    var DIALOG_ID = 'dialog_neon_v14';
 
     try { $(document).off('.' + SCRIPT_NS); } catch (e) {}
     try { Dialog.close(); } catch (e) {}
@@ -97,53 +97,83 @@
             return tempData;
         }
 
-        // --- FUNÇÕES AUXILIARES PARA CÁLCULO DE NUKES ---
         #getUnitPop(unit) {
             const pops = { spear: 1, sword: 1, axe: 1, archer: 1, spy: 2, light: 4, marcher: 5, heavy: 6, ram: 5, catapult: 8, knight: 10, snob: 100, militia: 0 };
             return pops[unit] || 0;
         }
 
-        #isOffensiveUnit(unit) {
-            return ['axe', 'light', 'ram', 'catapult', 'marcher'].includes(unit);
-        }
+        // Lógica Isolada para calcular Nukes baseada na Capacidade Total (Casa + Fora + Em Trânsito)
+        async #getNukesData() {
+            const nukes = { full: 0, threeQuarters: 0, half: 0, quarter: 0 };
+            let currentPage = 0; 
+            let lastRunTime = Date.now();
+            await this.#setMaxLinesPerPage('overview_villages', 'units', 1000);
+            await this.#waitMilliseconds(lastRunTime, 200);
+            let lastVillageId = null;
+            
+            const offUnitsToCount = ['axe', 'light', 'ram', 'catapult'];
+            if (this.availableUnits.includes('marcher')) offUnitsToCount.push('marcher');
 
-        #tallyNukes(nukesObj, offPop) {
-            if (offPop >= 19500) nukesObj.full++;
-            else if (offPop >= 15000) nukesObj.threeQuarters++;
-            else if (offPop >= 10000) nukesObj.half++;
-            else if (offPop >= 5000) nukesObj.quarter++;
+            do {
+                lastRunTime = Date.now();
+                const rawPage = this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'units', { page: currentPage }));
+                if (!rawPage) break;
+                const overviewTroopsPage = $.parseHTML(rawPage);
+                const troopsTable = $(overviewTroopsPage).find('#units_table tbody');
+                if (!troopsTable.length) break;
+                
+                const lastVillageIdTemp = $(troopsTable).find('span[data-id]').eq(0).attr('data-id') || $(troopsTable).find('tr:eq(0) td:eq(0)').text().trim();
+                if (!lastVillageIdTemp || lastVillageId === lastVillageIdTemp) break;
+                lastVillageId = lastVillageIdTemp;
+                
+                const headers = $(overviewTroopsPage).find('#units_table thead th img');
+                const unitIndices = {};
+                headers.each((idx, img) => {
+                    const unitMatch = $(img).attr('src').match(/unit_(\w+)/);
+                    if (unitMatch && offUnitsToCount.includes(unitMatch[1])) {
+                        unitIndices[unitMatch[1]] = idx; 
+                    }
+                });
+
+                $.each(troopsTable, (_, tbodyObj) => {
+                    let offPop = 0;
+                    const rows = $(tbodyObj).find('tr');
+                    
+                    // Row 0 = Casa, Row 2 = Fora (Apoios/Buscas), Row 3 = Em trânsito
+                    // Ignora Row 1 que são tropas de terceiros a apoiar a nossa aldeia.
+                    [0, 2, 3].forEach(rIdx => {
+                        if (rows.length > rIdx) {
+                            const row = rows.eq(rIdx);
+                            Object.entries(unitIndices).forEach(([unit, idx]) => {
+                                const valStr = row.find('td').eq(idx + 1).text().trim();
+                                const val = parseInt(valStr, 10) || 0;
+                                offPop += val * this.#getUnitPop(unit);
+                            });
+                        }
+                    });
+
+                    // Sistema de Classificação de Nukes ignorando Nobres
+                    if (offPop >= 19500) nukes.full++;
+                    else if (offPop >= 15000) nukes.threeQuarters++;
+                    else if (offPop >= 10000) nukes.half++;
+                    else if (offPop >= 5000) nukes.quarter++;
+                });
+                currentPage++; await this.#waitMilliseconds(lastRunTime, 200);
+            } while (true);
+            
+            return nukes;
         }
-        // ------------------------------------------------
 
         async #getTroopsScavengingWorldObj() {
-            const troopsObj = { villagesTroops: this.#initTroops(), scavengingTroops: this.#initTroops(), nukes: { full: 0, threeQuarters: 0, half: 0, quarter: 0 } };
+            const troopsObj = { villagesTroops: this.#initTroops(), scavengingTroops: this.#initTroops() };
             let currentPage = 0; let lastRunTime = null;
             do {
                 const scavengingObject = await getScavengeMassScreenJson(this, currentPage, lastRunTime);
                 if (!scavengingObject) return troopsObj; if (scavengingObject.length === 0) break;
                 lastRunTime = Date.now();
                 $.each(scavengingObject, (_, villageData) => {
-                    let villageOffPop = 0; // População ofensiva desta aldeia
-                    
-                    $.each(villageData.unit_counts_home || {}, (key, value) => { 
-                        if (this.availableUnits.includes(key)) {
-                            troopsObj.villagesTroops[key] += value;
-                            if (this.#isOffensiveUnit(key)) villageOffPop += value * this.#getUnitPop(key);
-                        }
-                    });
-                    
-                    $.each(villageData.options || [], (_, option) => { 
-                        if (option.scavenging_squad !== null) { 
-                            $.each(option.scavenging_squad.unit_counts || {}, (key, value) => { 
-                                if (this.availableUnits.includes(key)) {
-                                    troopsObj.scavengingTroops[key] += value;
-                                    if (this.#isOffensiveUnit(key)) villageOffPop += value * this.#getUnitPop(key);
-                                }
-                            }); 
-                        } 
-                    });
-
-                    this.#tallyNukes(troopsObj.nukes, villageOffPop); // Avalia a aldeia
+                    $.each(villageData.unit_counts_home || {}, (key, value) => { if (this.availableUnits.includes(key)) troopsObj.villagesTroops[key] += value; });
+                    $.each(villageData.options || [], (_, option) => { if (option.scavenging_squad !== null) { $.each(option.scavenging_squad.unit_counts || {}, (key, value) => { if (this.availableUnits.includes(key)) troopsObj.scavengingTroops[key] += value; }); } });
                 });
                 currentPage++;
             } while (true);
@@ -161,7 +191,7 @@
         }
 
         async #getTroopsNonScavengingWorldObj() {
-            const troopsObj = { villagesTroops: this.#initTroops(), scavengingTroops: this.#initTroops(), nukes: { full: 0, threeQuarters: 0, half: 0, quarter: 0 } };
+            const troopsObj = { villagesTroops: this.#initTroops(), scavengingTroops: this.#initTroops() };
             let currentPage = 0; let lastRunTime = Date.now();
             await this.#setMaxLinesPerPage('overview_villages', 'units', 1000);
             await this.#waitMilliseconds(lastRunTime, 200);
@@ -176,11 +206,8 @@
                 const lastVillageIdTemp = $(troopsTable).find('span').eq(0).attr('data-id');
                 if (!lastVillageIdTemp || lastVillageId === lastVillageIdTemp) break;
                 lastVillageId = lastVillageIdTemp;
-                
                 $.each(troopsTable, (_, tbodyObj) => {
-                    let villageOffPop = 0; // População ofensiva desta aldeia
                     const headers = $(overviewTroopsPage).find('#units_table thead th img');
-                    
                     headers.each((idx, img) => {
                         const unitMatch = $(img).attr('src').match(/unit_(\w+)/);
                         if (unitMatch) {
@@ -188,12 +215,9 @@
                             if (this.availableUnits.includes(unitName)) {
                                 const val = parseInt($(tbodyObj).find('tr').eq(0).find('td').eq(idx+2).text().trim(), 10) || 0;
                                 troopsObj.villagesTroops[unitName] += val;
-                                if (this.#isOffensiveUnit(unitName)) villageOffPop += val * this.#getUnitPop(unitName);
                             }
                         }
                     });
-
-                    this.#tallyNukes(troopsObj.nukes, villageOffPop); // Avalia a aldeia
                 });
                 currentPage++; await this.#waitMilliseconds(lastRunTime, 200);
             } while (true);
@@ -235,12 +259,12 @@
             const labels = { spear: 'Lanceiros', sword: 'Espadachins', axe: 'Vikings', spy: 'Batedores', light: 'Cavalaria Leve', heavy: 'Cavalaria Pesada', ram: 'Aríetes', catapult: 'Catapultas', knight: 'Paladinos' };
             for (let [key, value] of Object.entries(totalTroops)) { if(this.availableUnits.includes(key)) bbCode += `[unit]${key}[/unit] [b]${this.#formatNumber(value)}[/b] ${labels[key] || key}\n`; }
             
-            bbCode += `\n[b]Análise de Ataque:[/b]\n`;
-            bbCode += `Fulls (>=19.5k): [b]${nukes.full}[/b]\n`;
+            bbCode += `\n[b]🔥 Análise de Nukes:[/b]\n`;
+            bbCode += `Fulls: [b]${nukes.full}[/b]\n`;
             bbCode += `3/4 Fulls: [b]${nukes.threeQuarters}[/b]\n`;
             bbCode += `1/2 Fulls: [b]${nukes.half}[/b]\n`;
             bbCode += `1/4 Fulls: [b]${nukes.quarter}[/b]\n`;
-
+            
             return bbCode;
         }
 
@@ -269,7 +293,7 @@
                         fields: [
                             { 
                                 name: "Unidades", 
-                                value: `<:viking:1368839515661139968> **Vikings:** ${this.#formatNumber(total.axe)}\n<:batedor:1368839512423137404> **Batedores:** ${this.#formatNumber(total.spy)}\n<:leve:1368839513077715016> **Leve:** ${this.#formatNumber(total.light)}\n<:ariete:1368839512033038387> **Aríetes:** ${this.#formatNumber(total.ram)}\n<:catapulta:1368839516441280573> **Catas:** ${this.#formatNumber(total.catapult)}`, 
+                                value: `<:viking:1368839515661139968> **Vikings:** ${this.#formatNumber(total.axe)}\n<:batedor:1368839512423137404> **Batedores:** ${this.#formatNumber(total.spy)}\n<:leve:1368839513077715016> **Leve:** ${this.#formatNumber(total.light)}\n<:ariete:1368839512033038387> **Aríetes:** ${this.#formatNumber(total.ram)}\n<:catapulta:1368839516441280573> **Catas:** ${this.#formatNumber(total.catapult)}\n<:paladino:1368332901728391319> **Paladino:** ${this.#formatNumber(total.knight || 0)}`, 
                                 inline: true 
                             },
                             {
@@ -291,7 +315,10 @@
             UI.InfoMessage(this.UserTranslation.loadingMessage);
             const troopsObj = this.isScavengingWorld ? await this.#getTroopsScavengingWorldObj() : await this.#getTroopsNonScavengingWorldObj();
             const total = this.#buildTotalTroopsObj(troopsObj);
-            const nukes = troopsObj.nukes; // <- Pega os nukes calculados diretamente do objecto
+            
+            // Calcula os Nukes verdadeiros em paralelo
+            const nukes = await this.#getNukesData();
+            
             const t = this.UserTranslation;
 
             const groupsHtml = (() => {
