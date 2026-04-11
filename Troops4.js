@@ -154,8 +154,8 @@
                     });
 
                     // Classificação de Nukes (sem Nobres)
-                    if (offPop >= 19500) nukes.full++;
-                    else if (offPop >= 15000) nukes.threeQuarters++;
+                    if (offPop >= 18500) nukes.full++;
+                    else if (offPop >= 13500) nukes.threeQuarters++;
                     else if (offPop >= 10000) nukes.half++;
                     else if (offPop >= 5000) nukes.quarter++;
                 });
