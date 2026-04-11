@@ -1,7 +1,7 @@
 (function () {
     var webhookURL = window.meuWebhookTW;
-    var SCRIPT_NS = 'neon_militar_final_v14';
-    var DIALOG_ID = 'dialog_neon_v14';
+    var SCRIPT_NS = 'neon_militar_final_v15';
+    var DIALOG_ID = 'dialog_neon_v15';
 
     try { $(document).off('.' + SCRIPT_NS); } catch (e) {}
     try { Dialog.close(); } catch (e) {}
@@ -102,7 +102,7 @@
             return pops[unit] || 0;
         }
 
-        // Lógica Isolada para calcular Nukes baseada na Capacidade Total (Casa + Fora + Em Trânsito)
+        // Lógica Isolada para calcular Nukes (Casa + Fora + Em Trânsito)
         async #getNukesData() {
             const nukes = { full: 0, threeQuarters: 0, half: 0, quarter: 0 };
             let currentPage = 0; 
@@ -139,20 +139,21 @@
                     let offPop = 0;
                     const rows = $(tbodyObj).find('tr');
                     
-                    // Row 0 = Casa, Row 2 = Fora (Apoios/Buscas), Row 3 = Em trânsito
-                    // Ignora Row 1 que são tropas de terceiros a apoiar a nossa aldeia.
+                    // Row 0 = Casa, Row 2 = Fora, Row 3 = Em trânsito
                     [0, 2, 3].forEach(rIdx => {
                         if (rows.length > rIdx) {
                             const row = rows.eq(rIdx);
                             Object.entries(unitIndices).forEach(([unit, idx]) => {
-                                const valStr = row.find('td').eq(idx + 1).text().trim();
+                                // CORREÇÃO: A primeira linha (Casa) tem a coluna do nome da aldeia (+2). As outras não (+1).
+                                const colOffset = (rIdx === 0) ? 2 : 1;
+                                const valStr = row.find('td').eq(idx + colOffset).text().trim();
                                 const val = parseInt(valStr, 10) || 0;
                                 offPop += val * this.#getUnitPop(unit);
                             });
                         }
                     });
 
-                    // Sistema de Classificação de Nukes ignorando Nobres
+                    // Classificação de Nukes (sem Nobres)
                     if (offPop >= 19500) nukes.full++;
                     else if (offPop >= 15000) nukes.threeQuarters++;
                     else if (offPop >= 10000) nukes.half++;
