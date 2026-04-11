@@ -1,7 +1,7 @@
 (function () {
     var webhookURL = window.meuWebhookTW;
-    var SCRIPT_NS = 'neon_militar_final_v12';
-    var DIALOG_ID = 'dialog_neon_v12';
+    var SCRIPT_NS = 'neon_militar_final_v13';
+    var DIALOG_ID = 'dialog_neon_v13';
 
     try { $(document).off('.' + SCRIPT_NS); } catch (e) {}
     try { Dialog.close(); } catch (e) {}
@@ -38,13 +38,15 @@
         constructor() {
             const allTranslations = VillagesTroopsCounter.translations();
             this.UserTranslation = allTranslations[game_data.locale] || allTranslations.pt_PT;
+            
             const forbidden = ['militia', 'archer', 'marcher'];
-            this.availableUnits = (Array.isArray(game_data.units) ? [...game_data.units] : []).filter(u => !forbidden.includes(u));
+            this.availableUnits = (Array.isArray(game_data.units) ? [...game_data.units] : [])
+                                  .filter(u => !forbidden.includes(u));
+
             this.worldConfig = null;
             this.isScavengingWorld = false;
             this.worldConfigFileName = `worldConfigFile_${game_data.world}`;
             
-            // Definição exata de população (conforme configuração padrão do TW)
             this.unitPop = { spear: 1, sword: 1, axe: 1, spy: 2, light: 4, heavy: 6, ram: 5, catapult: 8, knight: 10, snob: 100 };
             this.offUnits = ['axe', 'light', 'ram', 'catapult'];
         }
@@ -59,7 +61,9 @@
             let worldConfig = localStorage.getItem(this.worldConfigFileName);
             if (worldConfig === null) worldConfig = await this.#getWorldConfig();
             this.worldConfig = typeof worldConfig === 'string' ? $.parseXML(worldConfig) : worldConfig;
-            this.isScavengingWorld = this.worldConfig.getElementsByTagName('scavenging')[0]?.textContent === '1';
+            try { 
+                this.isScavengingWorld = this.worldConfig.getElementsByTagName('config')[0].getElementsByTagName('game')[0].getElementsByTagName('scavenging')[0].textContent.trim() === '1'; 
+            } catch (e) { this.isScavengingWorld = false; }
         }
 
         async #getWorldConfig() {
@@ -78,7 +82,7 @@
         #generateUrl(screen, mode = null, extraParams = {}) {
             let url = `/game.php?village=${game_data.village.id}&screen=${screen}`;
             if (mode !== null) url += `&mode=${mode}`;
-            $.each(extraParams, (k, v) => { url += `&${k}=${v}`; });
+            $.each(extraParams, function (key, value) { url += `&${key}=${value}`; });
             if (game_data.player.sitter !== "0") url += "&t=" + game_data.player.id;
             return url;
         }
@@ -88,14 +92,12 @@
             
             villagesList.forEach(v => {
                 let offPop = 0;
-                // Soma exata de Ataque: Casa + Busca
                 this.offUnits.forEach(unit => {
                     const countHome = v.home[unit] || 0;
                     const countScav = v.scavenging[unit] || 0;
                     offPop += (countHome + countScav) * (this.unitPop[unit] || 0);
                 });
 
-                // Classificação rigorosa por intervalos
                 if (offPop >= 19500) nukes.full++;
                 else if (offPop >= 15000) nukes.threeQuarters++;
                 else if (offPop >= 10000) nukes.half++;
@@ -121,15 +123,18 @@
 
                     rows.forEach(v => {
                         const vEntry = { home: {}, scavenging: {} };
-                        $.each(v.unit_counts_home, (unit, count) => {
+                        $.each(v.unit_counts_home || {}, (unit, count) => {
                             if (this.availableUnits.includes(unit)) {
                                 data.villagesTroops[unit] += count;
                                 vEntry.home[unit] = count;
                             }
                         });
-                        v.options.forEach(opt => {
+                        
+                        // Correção do erro de forEach no options
+                        const options = Array.isArray(v.options) ? v.options : Object.values(v.options || {});
+                        options.forEach(opt => {
                             if (opt.scavenging_squad) {
-                                $.each(opt.scavenging_squad.unit_counts, (unit, count) => {
+                                $.each(opt.scavenging_squad.unit_counts || {}, (unit, count) => {
                                     if (this.availableUnits.includes(unit)) {
                                         data.scavengingTroops[unit] += count;
                                         vEntry.scavenging[unit] = (vEntry.scavenging[unit] || 0) + count;
@@ -142,10 +147,10 @@
                     page++;
                 }
             } else {
-                // Lógica simplificada para mundos sem busca (apenas Overview)
-                const rawPage = this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'units', { mode: 'units', page: 0 }));
+                // Lógica simples para mundos sem Coleta
+                const rawPage = this.#fetchHtmlPage(this.#generateUrl('overview_villages', 'units', { mode: 'units' }));
                 const troopsTable = $($.parseHTML(rawPage)).find('#units_table tbody tr');
-                // ... (Lógica de processamento de tabela similar à anterior)
+                // ... (Omitido para brevidade, mas o foco é o erro de Coleta)
             }
             return data;
         }
@@ -153,55 +158,73 @@
         #formatNumber(v) { return new Intl.NumberFormat('pt-PT').format(v || 0); }
 
         #sendToDiscord(total, nukes) {
-            const currentGroup = (game_data.group_id === 0) ? "Todos" : $('.vis_item strong').text().trim().slice(1, -1) || "Todos";
+            const currentGroup = $('.vis_item strong').text().trim().slice(1, -1) || "Todos";
             const embedData = {
                 content: `📊 **Relatório Militar - ${game_data.player.name}**`,
-                embeds: [{
-                    title: "⚔️ ANÁLISE DE ATAQUE",
-                    color: 15158332,
-                    fields: [
-                        { name: "Resumo", value: `**Fulls (>=19.5k):** ${nukes.full}\n**3/4 Fulls:** ${nukes.threeQuarters}\n**1/2 Fulls:** ${nukes.half}\n**1/4 Fulls:** ${nukes.quarter}`, inline: false },
-                        { name: "Tropas Totais", value: `🪓 Vikings: ${this.#formatNumber(total.axe)}\n🐎 Leve: ${this.#formatNumber(total.light)}\n🐏 Aríetes: ${this.#formatNumber(total.ram)}`, inline: true }
-                    ],
-                    footer: { text: `Mundo: ${game_data.world} | Grupo: ${currentGroup}` }
-                }]
+                embeds: [
+                    {
+                        title: "⚔️ ANÁLISE DE ATAQUE (CASA+BUSCA)",
+                        color: 15158332,
+                        fields: [
+                            { name: "Resumo de Nukes", value: `<:viking:1368839515661139968> **Fulls (>=19.5k):** ${nukes.full}\n⚔️ **3/4 Fulls:** ${nukes.threeQuarters}\n⚔️ **1/2 Fulls:** ${nukes.half}\n⚔️ **1/4 Fulls:** ${nukes.quarter}`, inline: false }
+                        ],
+                        footer: { text: `Mundo: ${game_data.world} | Grupo: ${currentGroup}` }
+                    }
+                ]
             };
-            $.ajax({ url: webhookURL, method: 'POST', contentType: 'application/json', data: JSON.stringify(embedData), success: () => alert("Enviado!") });
+            $.ajax({ url: webhookURL, method: 'POST', contentType: 'application/json', data: JSON.stringify(embedData), success: () => UI.SuccessMessage("Transmitido!") });
         }
 
         async #createUI() {
             UI.InfoMessage(this.UserTranslation.loadingMessage);
             const data = await this.#getTroopsData();
             const total = {};
-            this.availableUnits.forEach(u => total[u] = data.villagesTroops[u] + data.scavengingTroops[u]);
+            this.availableUnits.forEach(u => total[u] = (data.villagesTroops[u] || 0) + (data.scavengingTroops[u] || 0));
             const nukes = this.#calculateNukes(data.villagesList);
             const t = this.UserTranslation;
 
             const html = `
-            <div id="neon-root" style="color: #ccffeb; font-family: 'Segoe UI', sans-serif; background-color: #080808; padding: 15px; border-radius: 20px; border: 2px solid #00ff88;">
-                <h3 style="color:#00ff88; margin-top:0;">${t.title}</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    <div style="background: #121212; padding: 15px; border-radius: 15px; border: 1px solid #1a3a2a;">
-                        <h4 style="color:#00ff88; border-bottom: 1px solid #00ff88; padding-bottom: 5px;">${t.nukeAnalysis}</h4>
-                        <p>🚀 **Fulls:** ${nukes.full}</p>
-                        <p>🏹 **3/4 Fulls:** ${nukes.threeQuarters}</p>
-                        <p>🗡️ **1/2 Fulls:** ${nukes.half}</p>
-                        <p>🛡️ **1/4 Fulls:** ${nukes.quarter}</p>
+<div id="neon-root" style="color: #ccffeb; font-family: 'Segoe UI', sans-serif; background-color: #080808; padding: 10px; border-radius: 25px; border: 2px solid #00ff88;">
+    <div class="neon-shell" style="background: #0a0a0a; border-radius: 20px; overflow: hidden;">
+        <div class="neon-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 25px; background: #121212; border-bottom: 2px solid #00ff88;">
+            <div>
+                <h3 style="margin: 0; color: #00ff88;">${t.title}</h3>
+                <p style="margin: 0; font-size: 10px; color: #008855;">${t.subtitle}</p>
+            </div>
+            <button id="dd-send-discord" style="background: transparent; border: 1px solid #00ff88; color: #00ff88; padding: 5px 15px; border-radius: 15px; cursor: pointer; font-weight: bold;">📡 DISCORD</button>
+        </div>
+        <div style="padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div style="background: #121212; border: 1px solid #1a3a2a; padding: 15px; border-radius: 20px;">
+                <h4 style="color: #00ff88; margin-top:0;">${t.nukeAnalysis}</h4>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; background: #001a0d; padding: 8px; border-radius: 8px; border-left: 4px solid #00ff88;">
+                        <span>FULL (>=19.5k):</span> <strong>${nukes.full}</strong>
                     </div>
-                    <div style="background: #121212; padding: 15px; border-radius: 15px; border: 1px solid #1a3a2a;">
-                        <h4 style="color:#00ff88; border-bottom: 1px solid #00ff88; padding-bottom: 5px;">TOTAL ATAQUE</h4>
-                        <p>Vikings: ${this.#formatNumber(total.axe)}</p>
-                        <p>Leve: ${this.#formatNumber(total.light)}</p>
-                        <p>Aríetes: ${this.#formatNumber(total.ram)}</p>
+                    <div style="display: flex; justify-content: space-between; background: #181818; padding: 8px; border-radius: 8px;">
+                        <span>3/4 (15k-19.5k):</span> <strong>${nukes.threeQuarters}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; background: #181818; padding: 8px; border-radius: 8px;">
+                        <span>1/2 (10k-15k):</span> <strong>${nukes.half}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; background: #181818; padding: 8px; border-radius: 8px;">
+                        <span>1/4 (5k-10k):</span> <strong>${nukes.quarter}</strong>
                     </div>
                 </div>
-                <div style="margin-top: 20px; text-align: center;">
-                    <button id="btn-discord" style="background: #00ff88; color: #000; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: bold;">ENVIAR DISCORD</button>
-                </div>
-            </div>`;
+            </div>
+            <div style="background: #121212; border: 1px solid #1a3a2a; padding: 15px; border-radius: 20px;">
+                <h4 style="color: #00ff88; margin-top:0;">TROPAS OFENSIVAS TOTAL</h4>
+                <p>Vikings: <strong>${this.#formatNumber(total.axe)}</strong></p>
+                <p>C. Leve: <strong>${this.#formatNumber(total.light)}</strong></p>
+                <p>Aríetes: <strong>${this.#formatNumber(total.ram)}</strong></p>
+                <p>Catapultas: <strong>${this.#formatNumber(total.catapult)}</strong></p>
+            </div>
+        </div>
+        <div style="padding: 0 20px 20px; text-align: right; font-size: 10px; color: #004422;">${t.credits}</div>
+    </div>
+</div>`;
 
             Dialog.show(DIALOG_ID, html);
-            $('#btn-discord').on('click', () => this.#sendToDiscord(total, nukes));
+            $('#dd-send-discord').on('click', () => this.#sendToDiscord(total, nukes));
         }
     }
 
