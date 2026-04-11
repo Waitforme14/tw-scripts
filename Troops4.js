@@ -12,7 +12,7 @@
             return {
                 pt_PT: {
                     title: 'SISTEMA MILITAR :: HUD',
-                    subtitle: 'Análise de Poder [CASA + BUSCA]2',
+                    subtitle: 'Análise de Poder [CASA + BUSCA]',
                     home: 'ALDEIAS',
                     scavenging: 'BUSCAS',
                     total: 'TOTAL SISTEMA',
