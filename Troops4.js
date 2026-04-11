@@ -58,7 +58,6 @@
             this.isScavengingWorld = false;
             this.worldConfigFileName = `worldConfigFile_${game_data.world}`;
             
-            // População das unidades para cálculo de Nukes
             this.unitPop = { spear: 1, sword: 1, axe: 1, spy: 2, light: 4, heavy: 6, ram: 5, catapult: 8, knight: 10, snob: 100 };
             this.offUnits = ['axe', 'light', 'ram', 'catapult'];
         }
@@ -107,7 +106,6 @@
             
             villagesData.forEach(v => {
                 let offPop = 0;
-                // Soma tropas em casa + buscas para esta aldeia específica
                 $.each(v.home, (unit, count) => {
                     if (this.offUnits.includes(unit)) offPop += (count * (this.unitPop[unit] || 0));
                 });
@@ -115,7 +113,7 @@
                     if (this.offUnits.includes(unit)) offPop += (count * (this.unitPop[unit] || 0));
                 });
 
-                if (offPop >= 20000) nukes.full++;
+                if (offPop >= 19500) nukes.full++;
                 else if (offPop >= 15000) nukes.threeQuarters++;
                 else if (offPop >= 10000) nukes.half++;
                 else if (offPop >= 5000) nukes.quarter++;
@@ -353,10 +351,10 @@
                 <div class="neon-section">
                     <div class="neon-panel-head"><h4>${t.nukeAnalysis}</h4></div>
                     <div class="nuke-stats-grid">
-                         <div class="nuke-stat-item"><span>FULL:</span> <strong>${nukes.full}</strong></div>
-                         <div class="nuke-stat-item"><span>3/4:</span> <strong>${nukes.threeQuarters}</strong></div>
-                         <div class="nuke-stat-item"><span>1/2:</span> <strong>${nukes.half}</strong></div>
-                         <div class="nuke-stat-item"><span>1/4:</span> <strong>${nukes.quarter}</strong></div>
+                         <div class="nuke-stat-item"><span>FULL (>=19.5k):</span> <strong>${nukes.full}</strong></div>
+                         <div class="nuke-stat-item"><span>3/4 (15k-19.5k):</span> <strong>${nukes.threeQuarters}</strong></div>
+                         <div class="nuke-stat-item"><span>1/2 (10k-15k):</span> <strong>${nukes.half}</strong></div>
+                         <div class="nuke-stat-item"><span>1/4 (5k-10k):</span> <strong>${nukes.quarter}</strong></div>
                     </div>
                 </div>
             </div>
